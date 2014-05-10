@@ -70,23 +70,30 @@ checkGraph g@(OGraph boundary nodes edges) =
 maxOId nodesList =
   maximum (0:(map fst nodesList))
 
+-- Shift the indices of a graph (but the boundary)
+shiftGraph offset (OGraph bound nodes edges) =
+  OGraph bound newNodes newEdges
+  where
+      translateId id = if id == boundaryId then id else id + offset
+      translatePath (OPath id gate) = OPath (translateId id) gate
+      translateEdge (OEdge from to) = OEdge (translatePath from) (translatePath to)
+      translateNode (id,node) = (translateId id,node)
+      newNodes = map translateNode nodes
+      newEdges = map translateEdge edges
+
 -- Vertical composition of two open graphs (if defined)
-(vertComp) (OGraph boundA nodesA edgesA) (OGraph boundB nodesB edgesB) =
+(vertComp) (OGraph boundA nodesA edgesA) b@(OGraph boundB nodesB edgesB) =
   if producers boundA /= consumers boundB then
     Nothing
   else
     Just (OGraph newBound [] []) -- newNodes newEdges
     where
+      OGraph _ nodesBShifted edgesBShifted = shiftGraph (maxOId nodesA) b
       newBound = (consumers boundA) ++ (producers boundB)
-      translateId id = if id == boundaryId then id else id + (maxOId nodesA)
-      translatePath (OPath id gate) = OPath (translateId id) gate
-      translateEdge (OEdge from to) = OEdge (translatePath from) (translatePath to)
-      translateNode (id,node) = (translateId id,node)
-      newNodesB = map translateNode nodesB
-      newEdgesB = concat . map (joinPath edgesA False) $ (map translateEdge edgesB)
+      newEdgesB = concat . map (joinPath edgesA False) $ edgesBShifted
       newEdgesA = concat . map (joinPath edgesB True) $ edgesA
       newEdges = newEdgesA ++ newEdgesB
-      newNodes = nodesA ++ newNodesB
+      newNodes = nodesA ++ nodesBShifted
       joinPath otherEdges productive edge = case edge of
         -- fromPath -> fromGate -> to
         OEdge fromGate@(OPath boundaryId _) to | (not productive) ->
@@ -98,15 +105,21 @@ maxOId nodesList =
               (filter (\ (OEdge eFrom _) -> eFrom == toGate) otherEdges)
         another -> [another]
 
-data SStr a = SStr String a
-instance Monad SStr where
-  (>>=) (SStr accu x) f =
-     SStr (accu ++ next) y
-       where
-         SStr next y = f x
-  return x = SStr "" x
-
-sprint str = SStr str ()
+-- Horizontal composition of two open graphs (always defined)
+(horiComp) (OGraph boundA nodesA edgesA) (OGraph boundB nodesB edgesB) =
+  OGraph bound nodes edges
+  where
+    bound = (map (\ (OGate name b) -> (OGate ("0"++name) b)) boundA) ++
+            (map (\ (OGate name b) -> (OGate ("1"++name) b)) boundB)
+    nodes = nodesA ++ nodesB
+    edges = (map (translateEdge "0") edgesA) ++ (map (translateEdge "1") edgesB)
+    translateEdge prefix (OEdge from to) = OEdge (translatePath prefix from)
+                                                 (translatePath prefix to)
+    translatePath prefix (OPath id name) =
+       if id == boundaryId then
+          OPath id (prefix ++ name)
+       else
+          OPath id name
 
 -- Outputs the graph to dotty
 toDotty (OGraph bound nodes edges) =
@@ -115,7 +128,6 @@ toDotty (OGraph bound nodes edges) =
    "}\n"
    where
     pPath (OPath id gate) = show id
-
 
 
          
