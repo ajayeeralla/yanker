@@ -1,9 +1,7 @@
 module Main where
 
 import Graphics.UI.Gtk
--- import Graphics.UI.Gtk.Glade
 import Graphics.UI.Gtk.Gdk.EventM
-
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.State
 import Data.Set as Set
@@ -13,36 +11,45 @@ import Control.Concurrent.MVar
 
 import DrawGraph
 import OpenGraph
--- http://projects.haskell.org/gtk2hs/docs/tutorial/glade/
 
 
-
-main = do
-    initGUI
+defaultGraphState :: GraphState
+defaultGraphState =
     let initGraph = (OGraph [(OGate "a" True), (OGate "b" False), (OGate "c" False)]
-                     [] (Set.empty))
-    let initPres = Map.empty
-    let initSelection = NoSelection
-    let initNodeBB = Set.empty
-    let initGateBB = Set.empty
-    graphState <- newMVar (GraphState initGraph initPres initSelection initNodeBB initGateBB)
+                     [] (Set.empty)) in
+    let initPres = Map.empty in
+    let initSelection = NoSelection in
+    let initNodeBB = Set.empty in
+    let initGateBB = Set.empty in
+    GraphState initGraph initPres initSelection initNodeBB initGateBB
+    
+main :: IO ()
+main = do
+    -- State of the interface
+    graphState <- newMVar defaultGraphState
     drawState <- newMVar DSelect
+    let changeDrawingState newState = modifyMVar_ drawState (\_ -> return newState)
+
+    -- GUI setup
+    initGUI
     builder <- builderNew
     builderAddFromFile builder "interface.glade"
+
+    -- Get interesting widgets
     window <- builderGetObject builder castToWindow "window1"
     drawWidget <- builderGetObject builder castToDrawingArea "drawingarea1"
+    selectButton <- builderGetObject builder castToToolButton "selectbutton"
+    nodeButton <- builderGetObject builder castToToolButton "nodebutton"
+    edgeButton <- builderGetObject builder castToToolButton "edgebutton"
 
+    -- Connect signals to callbacks
     on window objectDestroy mainQuit
     widgetAddEvents drawWidget [PointerMotionMask, ButtonPressMask]
     on drawWidget draw (drawScene drawState graphState)
     on drawWidget motionNotifyEvent (updateScene drawState graphState)
     on drawWidget buttonPressEvent (handleClick drawState graphState drawWidget)
 
-    let changeDrawingState newState = modifyMVar_ drawState (\_ -> return newState)
-
-    selectButton <- builderGetObject builder castToToolButton "selectbutton"
-    nodeButton <- builderGetObject builder castToToolButton "nodebutton"
-    edgeButton <- builderGetObject builder castToToolButton "edgebutton"
+    -- Buttons
     selectButton `onToolButtonClicked` (changeDrawingState DSelect)
     nodeButton `onToolButtonClicked` (changeDrawingState DNode)
     edgeButton `onToolButtonClicked` (changeDrawingState DEdge)

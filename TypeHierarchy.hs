@@ -1,6 +1,8 @@
+module TypeHierarchy where
+
 import Data.List
 import Data.Monoid
-import Data.Semigroup
+-- import Data.Semigroup
 
 -- Simple type in a pregroup: a base type and an exponent. +1 means right, -1 means left
 data PrgSType = PrgS String Int
