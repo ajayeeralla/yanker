@@ -214,6 +214,24 @@ addMaybeGate (Just (OPath oid gateName)) (Just producer) g@(OGraph _ nodes _)  =
             (id,ONode name ((OGate gateName producer):gates))
 addMaybeGate _ _ _ = Nothing
 
+getOrCreateGate gs x y =
+     (newGraph, searchResult `ifNothing` matchingNodeGate)
+     where
+       searchResult = findBoundingBox x y (gateBB gs)
+       graph = totalGraph gs
+       matchingNode = findBoundingBox x y (nodeBB gs)
+       isClickProducer oid =
+         (Map.lookup oid (nodeBB gs) >>= return . inLowerPartOfBBox x y) == Just True
+       matchingNodeGate = (matchingNode >>= (\ oid ->
+           let Just fresh = freshGateName graph oid in -- this is safe
+           return $ OPath oid fresh))
+       maybeProducer = matchingNode >>= return . isClickProducer
+       maybeGraph = addMaybeGate matchingNodeGate maybeProducer graph
+       newGraph = (case maybeGraph of
+                       Just g -> g
+                       Nothing -> graph)
+
+
 -- Handle a click based on the current state
 handleClick drawStateM gsM drawWidget = do
     coords <- eventCoordinates
@@ -223,6 +241,7 @@ handleClick drawStateM gsM drawWidget = do
     let gotoState newState = modifyMVar_ drawStateM (\_ -> return newState)
     let setGS newGS = modifyMVar_ gsM (\_ -> return newGS)
 
+        
     liftIO $ case st of
       DNode -> do
         let (OGraph gates nodes edges) = totalGraph gs
@@ -245,27 +264,14 @@ handleClick drawStateM gsM drawWidget = do
         setGS (gs { selection = newSelection })
         widgetQueueDraw drawWidget
       DEdge -> do
-        let searchResult = findBoundingBox x y (gateBB gs)
+        let (newGraph,searchResult) = getOrCreateGate gs x y
+        setGS (gs { totalGraph = newGraph })
         gotoState $ case searchResult of
           Nothing -> DEdge
           Just path -> DDrawing path x y
       DDrawing gate _ _ -> do
-        let searchResult = findBoundingBox x y (gateBB gs)
-        let graph = totalGraph gs
-        let matchingNode = findBoundingBox x y (nodeBB gs)
-        let isClickProducer oid =
-             (Map.lookup oid (nodeBB gs) >>= return . inLowerPartOfBBox x y) == Just True
-        let matchingNodeGate = (matchingNode >>= (\ oid ->
-              let Just fresh = freshGateName graph oid in -- this is safe
-              return $ OPath oid fresh))
-        let maybeProducer = matchingNode >>= return . isClickProducer
-        let maybeGraph = addMaybeGate matchingNodeGate maybeProducer graph 
-        putStrLn ("MaybeGraph: "++(show maybeGraph))
-        let newGraph = (case maybeGraph of
-                          Just g -> g
-                          Nothing -> graph)
-        putStrLn ("Ifnothing: "++(show (searchResult `ifNothing` matchingNodeGate)))
-        case (searchResult `ifNothing` matchingNodeGate) >>= (makeEdge newGraph gate) of
+        let (newGraph,maybeGate) = getOrCreateGate gs x y
+        case maybeGate >>= (makeEdge newGraph gate) of
           Nothing ->
              gotoState DEdge
           Just edge -> do
