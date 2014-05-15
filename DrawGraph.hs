@@ -104,6 +104,7 @@ drawEdge graph pres (OEdge from to) = do
     let (fromX,fromY) = getGatePos graph pres from
     let (toX,toY) = getGatePos graph pres to
     setSourceRGB 0 0 0
+    setLineWidth 1
     moveTo fromX fromY
     lineTo toX toY
     stroke
@@ -112,8 +113,8 @@ drawEdge graph pres (OEdge from to) = do
 drawGraph g@(OGraph gates nodes edges) presentation = do
     setSourceRGB 1 1 1
     paint
-    drawGates topOuterGates (consumers gates)
-    drawGates bottomOuterGates (producers gates)
+    drawGates topOuterGates (producers gates)
+    drawGates bottomOuterGates (consumers gates)
     doList (\ (id,ONode s gates) ->
         let Just (posX,posY) = Map.lookup id presentation in
         drawNode posX posY (fromIntegral . length $ (producers gates))
@@ -190,10 +191,19 @@ createGraphState g@(OGraph gates nodes edges) pres =
 
 -- Make an edge out of two gates, if there is one
 -- (one has to be producer, the other consumer)
+-- and no edge is currently bound to the consumer
 makeEdge graph path1 path2 =
     case (getGate path1 graph, getGate path2 graph) of
-     (Just True, Just False) -> Just $ OEdge path1 path2
-     (Just False, Just True) -> Just $ OEdge path2 path1
+     (Just True, Just False) ->
+         if checkAddEdge graph (OEdge path1 path2) then
+           Just $ OEdge path1 path2
+         else
+           Nothing 
+     (Just False, Just True) ->
+         if checkAddEdge graph (OEdge path2 path1) then
+           Just $ OEdge path2 path1
+         else
+           Nothing
      _ -> Nothing
 
 -- Handle a click based on the current state
@@ -226,20 +236,17 @@ handleClick drawStateM gsM drawWidget= do
         widgetQueueDraw drawWidget
       DEdge -> do
         let searchResult = findBoundingBox x y (gateBB gs)
-        putStrLn (show (gateBB gs))
-        putStrLn (show (x,y))
-        putStrLn (show searchResult)
         gotoState $ case searchResult of
           Nothing -> DEdge
           Just path -> DDrawing path x y
       DDrawing gate _ _ -> do
         let searchResult = findBoundingBox x y (gateBB gs)
-        putStrLn $ "Adding edge from "++(show gate)++" to "++(show searchResult)
-        case (searchResult >>= (makeEdge (totalGraph gs) gate)) of
+        let graph = totalGraph gs
+        case (searchResult >>= (makeEdge graph gate)) of
           Nothing ->
              gotoState DEdge
           Just edge -> do
-             putStrLn "Valid!"
+             putStrLn ("Current edges list is "++(show $ edgesList graph))
              let graph = totalGraph gs
              setGS (gs { totalGraph = graph { edgesList=Set.insert edge (edgesList graph) } })
              gotoState DEdge

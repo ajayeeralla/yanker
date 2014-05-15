@@ -33,7 +33,7 @@ getGatePos (OGraph gates nodes _) presentation (OPath id name) =
     if id == boundaryId then
        let Just (pos,producer) = findGateName name gates in
        (outerGateOffset + outerGateSpacing*pos,
-       if producer then bottomOuterGates else topOuterGates)
+       if producer then topOuterGates else bottomOuterGates)
     else
        let Just (_,(ONode _ gates)) = find (\ (cid,_) -> cid==id) nodes in
        let Just (pos,producer) = findGateName name gates in

@@ -15,7 +15,7 @@ import OpenGraph
 
 defaultGraphState :: GraphState
 defaultGraphState =
-    let initGraph = (OGraph [(OGate "a" True), (OGate "b" False), (OGate "c" False)]
+    let initGraph = (OGraph [(OGate "a" False), (OGate "b" True), (OGate "c" True)]
                      [] (Set.empty)) in
     createGraphState initGraph Map.empty
     

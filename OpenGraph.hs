@@ -48,6 +48,13 @@ getGate (OPath nodeId gateName) (OGraph boundaryGates nodes _) =
 
 allSet pred = Set.foldl' (\ found elem -> found && pred elem) True
 concatSet = Set.unions . Set.elems
+countSet f = Set.size . Set.filter f
+
+hasEdge edges path productive =
+   if productive then
+       countSet (\ (OEdge from to) -> from == path) edges >= 1
+   else
+       countSet (\ (OEdge from to) -> to == path) edges == 1
 
 -- Check that a graph is valid, i.e. that:
 -- 1/ all edges are linked to valid nodes
@@ -57,7 +64,7 @@ checkGraph g@(OGraph boundary nodes edges) =
     allSet isValidEdge edges &&
     all (\ (nodeId,(ONode _ gates)) ->
           all (\ (OGate gateName productive) ->
-                hasEdge (OPath nodeId gateName) productive)
+                hasEdge edges (OPath nodeId gateName) productive)
               gates)
         allNodes
     where
@@ -65,16 +72,12 @@ checkGraph g@(OGraph boundary nodes edges) =
         (polarityFrom >>= (return . not)) == polarityTo
         where polarityFrom = getGate from g
               polarityTo = getGate to g
-      hasEdge path productive =
-        if productive then
-           countSet (\ (OEdge from to) -> from == path) edges >= 1
-        else
-           countSet (\ (OEdge from to) -> to == path) edges == 1
+
       allNodes = nodesAndBoundary g
-      countSet pred = Set.foldl' (\ cnt elem -> if pred elem then cnt+1 else cnt) 0
       
 -- Check if we can add an edge to the graph
--- TODO checkAddEdge g (OEdge from to)
+checkAddEdge g@(OGraph _ _ edges) (OEdge from to) =
+    (countSet (\ (OEdge f t) -> t == to)  edges) == 0
 
 -- Get the maximum id attributed to a node
 maxOId nodesList =
