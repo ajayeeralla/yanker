@@ -58,8 +58,14 @@ drawNode posX posY nInputs nOutputs = do
     setSourceRGB 0 0 0
     setLineWidth 1
     let height = (nodeSemiHeight*2)
-    let topWidth = ((fromIntegral nInputs+1)*nodeGateSpacing)
-    let bottomWidth = ((fromIntegral nOutputs+1)*nodeGateSpacing)
+    let topWidth = if nInputs > 0 then
+                     ((fromIntegral nInputs+1)*nodeGateSpacing)
+                   else
+                     0
+    let bottomWidth = if nOutputs > 0 then
+                        ((fromIntegral nOutputs+1)*nodeGateSpacing)
+                      else
+                        0
 
     moveTo posX posY
     relMoveTo (topWidth/2) (-nodeSemiHeight)
