@@ -45,7 +45,7 @@ getGatePos (OGraph gates nodes _) presentation (OPath id name) =
        if producer then
           (posX-(bottomWidth/2)+nodeGateSpacing*(pos+1),posY+nodeSemiHeight)
        else
-          (posX-(topWidth/2)+nodeGateSpacing*(pos+1), posY+nodeSemiHeight)
+          (posX-(topWidth/2)+nodeGateSpacing*(pos+1), posY-nodeSemiHeight)
 
 
 -- Create a bounding box for a node given the number
@@ -76,6 +76,10 @@ boundingBoxFromGate graph presentation (OPath nid name) =
 inBoundingBox :: Double -> Double -> BoundingBox -> Bool
 inBoundingBox x y (BBox startx starty width height) =
     (x >= startx && y >= starty && x <= startx+width && y <= starty + height)
+
+-- If it is in the bounding box, is it in the lower part ?
+inLowerPartOfBBox x y (BBox _ starty _ height) =
+    y >= starty + height/2
 
 -- Get the key of a bounding box containing the point (if any)
 findBoundingBox x y =

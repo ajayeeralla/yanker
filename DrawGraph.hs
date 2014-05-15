@@ -71,18 +71,6 @@ drawNode posX posY nInputs nOutputs = do
 
     stroke
 
-    doList (\ x -> do
-       moveTo (posX-(bottomWidth/2)+x) (posY+nodeSemiHeight)
-       relLineTo 0 nodeGateVertOffset) .
-       List.map (* nodeGateSpacing) .
-       (List.map fromIntegral) $ (seqInt nOutputs [])
-
-    doList (\ x -> do
-       moveTo (posX-(topWidth/2)+x) (posY-nodeSemiHeight)
-       relLineTo 0 (-nodeGateVertOffset)) .
-       List.map (* nodeGateSpacing) .
-       (List.map fromIntegral) $ (seqInt nInputs [])
-
 -- Draw an outer gate
 drawGate :: Double -> Double -> Render ()
 drawGate posX posY = do
@@ -117,8 +105,8 @@ drawGraph g@(OGraph gates nodes edges) presentation = do
     drawGates bottomOuterGates (consumers gates)
     doList (\ (id,ONode s gates) ->
         let Just (posX,posY) = Map.lookup id presentation in
-        drawNode posX posY (fromIntegral . length $ (producers gates))
-                           (fromIntegral . length $ (consumers gates)))
+        drawNode posX posY (fromIntegral . length $ (consumers gates))
+                           (fromIntegral . length $ (producers gates)))
            nodes
     doSet (drawEdge g presentation) edges
     where
@@ -126,9 +114,6 @@ drawGraph g@(OGraph gates nodes edges) presentation = do
       doList (\ ((OGate s _),id) ->
           drawGate (outerGateOffset + outerGateSpacing*id) position) .
       indexList
-
--- Find an element in a set satisfying a predicate
-findSet predicate = Set.foldl (\ accu elem -> if (predicate elem) then Just elem else accu) Nothing
 
 -- Draw the current selection
 drawSelection _ NoSelection = return ()
@@ -206,6 +191,19 @@ makeEdge graph path1 path2 =
            Nothing
      _ -> Nothing
 
+ifNothing Nothing b = b
+ifNothing a _ = a
+
+addMaybeGate (Just (OPath oid gateName)) (Just producer) g@(OGraph _ nodes _)  =
+    Just (g { nodesList = List.map changeNodes nodes })
+    where
+      changeNodes n@(id,ONode name gates) =
+         if id /= oid then
+            n
+         else
+            (id,ONode name ((OGate gateName producer):gates))
+addMaybeGate _ _ _ = Nothing
+
 -- Handle a click based on the current state
 handleClick drawStateM gsM drawWidget= do
     coords <- eventCoordinates
@@ -242,13 +240,27 @@ handleClick drawStateM gsM drawWidget= do
       DDrawing gate _ _ -> do
         let searchResult = findBoundingBox x y (gateBB gs)
         let graph = totalGraph gs
-        case (searchResult >>= (makeEdge graph gate)) of
+        let matchingNode = findBoundingBox x y (nodeBB gs)
+        let isClickProducer oid =
+             (Map.lookup oid (nodeBB gs) >>= return . inLowerPartOfBBox x y) == Just True
+        let matchingNodeGate = (matchingNode >>= (\ oid ->
+              let Just fresh = freshGateName graph oid in -- this is safe
+              return $ OPath oid fresh))
+        let maybeProducer = matchingNode >>= return . isClickProducer
+        let maybeGraph = addMaybeGate matchingNodeGate maybeProducer graph 
+        putStrLn ("MaybeGraph: "++(show maybeGraph))
+        let newGraph = (case maybeGraph of
+                          Just g -> g
+                          Nothing -> graph)
+        putStrLn ("Ifnothing: "++(show (searchResult `ifNothing` matchingNodeGate)))
+        case (searchResult `ifNothing` matchingNodeGate) >>= (makeEdge newGraph gate) of
           Nothing ->
              gotoState DEdge
           Just edge -> do
-             putStrLn ("Current edges list is "++(show $ edgesList graph))
-             let graph = totalGraph gs
-             setGS (gs { totalGraph = graph { edgesList=Set.insert edge (edgesList graph) } })
+             putStrLn ("Current edges list is "++(show $ edgesList newGraph))
+             setGS (gs {
+               totalGraph = newGraph {
+                  edgesList=Set.insert edge (edgesList newGraph) } })
              gotoState DEdge
         widgetQueueDraw drawWidget
       _ -> putStrLn ("Click handled at position " ++ (show coords))

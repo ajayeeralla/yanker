@@ -1,6 +1,8 @@
 module OpenGraph where
 
 import Data.List
+import Data.Maybe
+import Control.Exception
 import qualified Data.Set as Set
 
 -- Internal identifiers (pointers) for nodes
@@ -35,7 +37,7 @@ data OGraph = OGraph {
      boundaryGates :: [OGate],
      nodesList :: [(OId,ONode)],
      edgesList :: (Set.Set OEdge)}
-   deriving (Eq)
+   deriving (Eq,Show)
 -- All the nodes, including a fake node for the boundary
 nodesAndBoundary (OGraph boundary nodes _) =
    (boundaryId,(ONode "" boundary)):nodes
@@ -49,6 +51,11 @@ getGate (OPath nodeId gateName) (OGraph boundaryGates nodes _) =
 allSet pred = Set.foldl' (\ found elem -> found && pred elem) True
 concatSet = Set.unions . Set.elems
 countSet f = Set.size . Set.filter f
+-- Find an element in a set satisfying a predicate
+findSet predicate = Set.foldl (\ accu elem -> if (predicate elem) then Just elem else accu) Nothing
+
+maybeRead :: Read a => String -> Maybe a
+maybeRead = fmap fst . listToMaybe . reads
 
 hasEdge edges path productive =
    if productive then
@@ -78,6 +85,18 @@ checkGraph g@(OGraph boundary nodes edges) =
 -- Check if we can add an edge to the graph
 checkAddEdge g@(OGraph _ _ edges) (OEdge from to) =
     (countSet (\ (OEdge f t) -> t == to)  edges) == 0
+
+-- Get a fresh name of a gate for a specific node
+freshGateName g@(OGraph _ nodes _) oid =
+    find (\(id,_) -> id == oid) nodes
+    >>= (\ (_,ONode _ gates) ->
+     (return $ foldl (\ accu (OGate name _) ->
+                 case (maybeRead name :: (Maybe Int)) of
+                   Just num -> if accu <= num then (num+1) else accu
+                   Nothing -> accu)
+                0
+                gates))
+     >>= return . show
 
 -- Get the maximum id attributed to a node
 maxOId nodesList =
