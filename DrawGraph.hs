@@ -5,6 +5,7 @@ import Data.List as List
 import Data.Set as Set
 import qualified Data.Map.Strict as Map
 import OpenGraph as OG
+import GraphPresentation
 
 -- GUI / Rendering stuff
 import Graphics.Rendering.Cairo
@@ -12,16 +13,10 @@ import Control.Concurrent.MVar
 import Graphics.UI.Gtk.Gdk.EventM
 import Graphics.UI.Gtk.Abstract.Widget
 
--- Defines the positions of the nodes of a graph onscreen
-type GraphPresentation = Map.Map OId (Double,Double)
 
 -- Current state of the pointer
-data DrawingState = DSelect | DMoving OId | DNode | DEdge | DDrawing OPath
+data DrawingState = DSelect | DMoving OId | DNode | DEdge | DDrawing OPath Double Double
      deriving (Eq)
-
--- Bounding box for nodes and gates
-data BoundingBox = BBox Double Double Double Double
-     deriving (Eq,Ord)
 
 -- Current state of the object selection
 data ElemSelection = SelectNode OId | SelectEdge OPath | NoSelection
@@ -31,25 +26,16 @@ data GraphState = GraphState {
        totalGraph :: OGraph,
        presentation :: GraphPresentation,
        selection :: ElemSelection,
-       nodeBB :: (Set.Set (OId,BoundingBox)),
-       gateBB :: (Set.Set (OPath,BoundingBox)) }
+       nodeBB :: (Map.Map OId BoundingBox),
+       gateBB :: (Map.Map OPath BoundingBox),
+       lastMouse :: (Double,Double) }
 
--- Drawing constants
-nodeSemiHeight = 20
-nodeGateSpacing = 15
-nodeGateVertOffset = 10
-gateRadius = 3
-
--- Where to draw outer gates
-outerGateOffset = 60
-outerGateSpacing = 60
-topOuterGates = 60
-bottomOuterGates = 400
 
 seqInt 0 accu = accu
 seqInt n accu = seqInt (n-1) (n:accu)
 
 doList f = List.foldl (\ accu elem -> accu >> (f elem)) (return ())
+doSet f = Set.foldl (\ accu elem -> accu >> (f elem)) (return ())
 
 -- Draw a node onscreen
 drawNode :: Double -> Double -> Int -> Int -> Render ()
@@ -111,42 +97,19 @@ indexList = indexList_accu 0
      indexList_accu curId [] = []
      indexList_accu curId (h:t) = (h,curId):(indexList_accu (curId+1) t)
 
--- Get the position (and whether it is a producer or not) of a gate given its name
--- and the list of gates of its node
-findGateName :: Num a => String -> [OGate] -> Maybe (a,Bool)
-findGateName = findGateName_accu (0,0)
-  where
-    findGateName_accu accu name [] = Nothing
-    findGateName_accu (accu1,accu2) name ((OGate s b):t) =
-      if s == name then Just (if b then accu1 else accu2, b)
-      else if b then
-        findGateName_accu (accu1+1,accu2) name t
-      else
-        findGateName_accu (accu1,accu2+1) name t
 
--- Get the position of a gate designated by a path
--- given a graph and a graph presentation
-getGatePos :: OGraph -> OPath -> GraphPresentation -> (Double,Double)
-getGatePos (OGraph gates nodes _) (OPath id name) presentation =
-    if id == boundaryId then
-       let Just (pos,producer) = findGateName name gates in
-       (outerGateOffset + outerGateSpacing*pos,
-       if producer then bottomOuterGates else topOuterGates)
-    else
-       let Just (_,(ONode _ gates)) = find (\ (cid,_) -> cid==id) nodes in
-       let Just (pos,producer) = findGateName name gates in
-       let Just (posX,posY) = Map.lookup id presentation in
-       let nInputs = fromIntegral . length . consumers $ gates in
-       let nOutputs = fromIntegral . length . producers $ gates in
-       let topWidth = (nInputs+1)*nodeGateSpacing in
-       let bottomWidth = (nOutputs+1)*nodeGateSpacing in
-       if producer then
-          (posX-(bottomWidth/2)+nodeGateSpacing*(pos+1),posY+nodeSemiHeight)
-       else
-          (posX-(topWidth/2)+nodeGateSpacing*(pos+1), posY+nodeSemiHeight)
+-- Draw an edge
+drawEdge :: OGraph -> GraphPresentation -> OEdge -> Render ()
+drawEdge graph pres (OEdge from to) = do
+    let (fromX,fromY) = getGatePos graph pres from
+    let (toX,toY) = getGatePos graph pres to
+    setSourceRGB 0 0 0
+    moveTo fromX fromY
+    lineTo toX toY
+    stroke
 
 -- Draw a graph given its presentation
-drawGraph (OGraph gates nodes edges) presentation = do
+drawGraph g@(OGraph gates nodes edges) presentation = do
     setSourceRGB 1 1 1
     paint
     drawGates topOuterGates (consumers gates)
@@ -156,6 +119,7 @@ drawGraph (OGraph gates nodes edges) presentation = do
         drawNode posX posY (fromIntegral . length $ (producers gates))
                            (fromIntegral . length $ (consumers gates)))
            nodes
+    doSet (drawEdge g presentation) edges
     where
      drawGates position =
       doList (\ ((OGate s _),id) ->
@@ -168,9 +132,9 @@ findSet predicate = Set.foldl (\ accu elem -> if (predicate elem) then Just elem
 -- Draw the current selection
 drawSelection _ NoSelection = return ()
 drawSelection bounds (SelectNode id) =
-    case (findSet (\ (i,_) -> i == id) bounds) of
+    case (Map.lookup id bounds) of
      Nothing -> return ()
-     Just (_,(BBox startx starty width height)) -> do
+     Just (BBox startx starty width height) -> do
        setSourceRGB 0.5 0.5 0.5
        moveTo startx starty
        relLineTo width 0
@@ -181,56 +145,104 @@ drawSelection bounds (SelectNode id) =
 drawSelection _ _ = return ()
 
 -- Draw the whole scene (graph and selection if any)
-drawScene drawState gsM = do
+drawScene drawStateM gsM = do
     gs <- liftIO (readMVar gsM)
+    let (x,y) = lastMouse gs
+    drawState <- liftIO (readMVar drawStateM)
     drawGraph (totalGraph gs) (presentation gs)
     drawSelection (nodeBB gs) (selection gs)
+    case drawState of
+      DDrawing _ origX origY -> do
+         setSourceRGB 0 0 0
+         setLineWidth 1
+         moveTo origX origY
+         lineTo x y
+         stroke
+      DNode -> do
+         drawNode x y 0 0
+      _ -> return ()
 
-updateScene drawStateM gsM =    
+updateScene drawStateM gsM drawWidget = do
+    (x,y) <- eventCoordinates
+    liftIO $ modifyMVar_ gsM (\gs -> return $ gs { lastMouse = (x,y) })
+    drawState <- liftIO $ readMVar drawStateM
+    case drawState of
+      DDrawing _ _ _ -> liftIO $ widgetQueueDraw drawWidget
+      DNode -> liftIO $ widgetQueueDraw drawWidget
+      _ -> return ()
     return True
 
--- Create a bounding box for a node given the number
--- of inputs, outputs and its position
-makeNodeBoundingBox :: Int -> Int -> Double -> Double -> BoundingBox
-makeNodeBoundingBox 0 0 x y =
-    BBox (x-nodeSemiHeight) (y-nodeSemiHeight) (2*nodeSemiHeight) (2*nodeSemiHeight)
 
-makeNodeBoundingBox nInputs nOutputs x y =
-    let tot = max nInputs nOutputs in
-    let width = (fromIntegral (tot+1))*nodeGateSpacing in
-    BBox (x - width/2) (y - nodeSemiHeight) width (2*nodeSemiHeight)
+-- Create a new graph state based on an input graph and a presentation
+createGraphState g@(OGraph gates nodes edges) pres = 
+    GraphState g pres NoSelection nodeBB gateBB (0,0)
+    where
+      nodeBB = List.foldl (\ m n -> Map.insert (fst n) (boundingBoxFromNode pres n) m)
+                         Map.empty
+                         nodes
+      addGates boundMap nodeId gates = List.foldl (\ bm (OGate n _) ->
+            Map.insert (OPath nodeId n) (boundingBoxFromGate g pres (OPath nodeId n)) bm)
+                       boundMap
+                       gates
+      gateBB = List.foldl (\ m (id,ONode _ gates) -> addGates m id gates) outerGatesBB nodes
+      outerGatesBB = addGates Map.empty boundaryId gates
 
--- Is this point in the bounding box ?
-inBoundingBox :: Double -> Double -> BoundingBox -> Bool
-inBoundingBox x y (BBox startx starty width height) =
-    (x >= startx && y >= starty && x <= startx+width && y <= starty + height)
+
+-- Make an edge out of two gates, if there is one
+-- (one has to be producer, the other consumer)
+makeEdge graph path1 path2 =
+    case (getGate path1 graph, getGate path2 graph) of
+     (Just True, Just False) -> Just $ OEdge path1 path2
+     (Just False, Just True) -> Just $ OEdge path2 path1
+     _ -> Nothing
 
 -- Handle a click based on the current state
 handleClick drawStateM gsM drawWidget= do
     coords <- eventCoordinates
+    let (x,y) = coords
     st <- liftIO (readMVar drawStateM)
-    if st == DNode then liftIO $ do
-        gs <- liftIO (readMVar gsM)
+    gs <- liftIO (readMVar gsM)
+    let gotoState newState = modifyMVar_ drawStateM (\_ -> return newState)
+    let setGS newGS = modifyMVar_ gsM (\_ -> return newGS)
+
+    liftIO $ case st of
+      DNode -> do
         let (OGraph gates nodes edges) = totalGraph gs
         let pres = presentation gs
         let newId = maxOId nodes + 1
         let newGraph = OGraph gates ((newId,(ONode "" [])):nodes) edges
         let newPres = Map.insert newId coords pres
-        let (x,y) = coords
-        let newNodeBB = Set.insert (newId,makeNodeBoundingBox 0 0 x y) (nodeBB gs)
-        modifyMVar_ gsM (\_ -> return (gs { totalGraph = newGraph,
-                                            presentation = newPres,
-                                            nodeBB = newNodeBB }))
+        let newNodeBB = Map.insert newId (makeNodeBoundingBox 0 0 x y) (nodeBB gs)
+        setGS (gs { totalGraph = newGraph,
+                    presentation = newPres,
+                    nodeBB = newNodeBB })
         widgetQueueDraw drawWidget
-    else if st == DSelect then liftIO $ do
-        gs <- liftIO (readMVar gsM)
-        let (x,y) = coords
-        let searchResult = (Set.foldl (\ fnd (id,bb) -> if (inBoundingBox x y bb) then (Just id) else fnd) Nothing (nodeBB gs))
+      DSelect -> do
+        let searchResult = findBoundingBox x y (nodeBB gs)
         newSelection <- return (case searchResult of
           Nothing -> NoSelection
           Just id -> SelectNode id)
-        modifyMVar_ gsM (\_ -> return (gs { selection = newSelection }))
+        setGS (gs { selection = newSelection })
         widgetQueueDraw drawWidget
-    else
-        liftIO $ putStrLn ("Click handled at position " ++ (show coords))
+      DEdge -> do
+        let searchResult = findBoundingBox x y (gateBB gs)
+        putStrLn (show (gateBB gs))
+        putStrLn (show (x,y))
+        putStrLn (show searchResult)
+        gotoState $ case searchResult of
+          Nothing -> DEdge
+          Just path -> DDrawing path x y
+      DDrawing gate _ _ -> do
+        let searchResult = findBoundingBox x y (gateBB gs)
+        putStrLn $ "Adding edge from "++(show gate)++" to "++(show searchResult)
+        case (searchResult >>= (makeEdge (totalGraph gs) gate)) of
+          Nothing ->
+             gotoState DEdge
+          Just edge -> do
+             putStrLn "Valid!"
+             let graph = totalGraph gs
+             setGS (gs { totalGraph = graph { edgesList=Set.insert edge (edgesList graph) } })
+             gotoState DEdge
+        widgetQueueDraw drawWidget
+      _ -> putStrLn ("Click handled at position " ++ (show coords))
     return True

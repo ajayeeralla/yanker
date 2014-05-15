@@ -17,11 +17,7 @@ defaultGraphState :: GraphState
 defaultGraphState =
     let initGraph = (OGraph [(OGate "a" True), (OGate "b" False), (OGate "c" False)]
                      [] (Set.empty)) in
-    let initPres = Map.empty in
-    let initSelection = NoSelection in
-    let initNodeBB = Set.empty in
-    let initGateBB = Set.empty in
-    GraphState initGraph initPres initSelection initNodeBB initGateBB
+    createGraphState initGraph Map.empty
     
 main :: IO ()
 main = do
@@ -46,7 +42,7 @@ main = do
     on window objectDestroy mainQuit
     widgetAddEvents drawWidget [PointerMotionMask, ButtonPressMask]
     on drawWidget draw (drawScene drawState graphState)
-    on drawWidget motionNotifyEvent (updateScene drawState graphState)
+    on drawWidget motionNotifyEvent (updateScene drawState graphState drawWidget)
     on drawWidget buttonPressEvent (handleClick drawState graphState drawWidget)
 
     -- Buttons
