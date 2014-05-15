@@ -30,7 +30,6 @@ data GraphState = GraphState {
        gateBB :: (Map.Map OPath BoundingBox),
        lastMouse :: (Double,Double) }
 
-
 seqInt 0 accu = accu
 seqInt n accu = seqInt (n-1) (n:accu)
 
@@ -77,11 +76,24 @@ drawNode posX posY nInputs nOutputs = do
 
     stroke
 
+    doList (\ x -> do
+       arc (posX-(bottomWidth/2)+x) (posY+nodeSemiHeight) gateRadius 0 (2*pi)
+       fill) .
+       List.map (* nodeGateSpacing) .
+       (List.map fromIntegral) $ (seqInt nOutputs [])
+
+    doList (\ x -> do
+       arc (posX-(topWidth/2)+x) (posY-nodeSemiHeight) gateRadius 0 (2*pi)
+       fill) .
+       List.map (* nodeGateSpacing) .
+       (List.map fromIntegral) $ (seqInt nInputs [])
+
+
 -- Draw an outer gate
 drawGate :: Double -> Double -> Render ()
 drawGate posX posY = do
     setSourceRGB 1 0 0
-    arc posX posY gateRadius 0 (2*3.14159)
+    arc posX posY gateRadius 0 (2*pi)
     fill
 
 -- Add indexes to elements of a list
@@ -215,22 +227,29 @@ addMaybeGate (Just (OPath oid gateName)) (Just producer) g@(OGraph _ nodes _)  =
 addMaybeGate _ _ _ = Nothing
 
 getOrCreateGate gs x y =
-     (newGraph, searchResult `ifNothing` matchingNodeGate)
+     case searchResult of
+       Nothing -> createGateAt gs x y
+       Just g -> (graph,Just g)     
      where
-       searchResult = findBoundingBox x y (gateBB gs)
        graph = totalGraph gs
-       matchingNode = findBoundingBox x y (nodeBB gs)
-       isClickProducer oid =
-         (Map.lookup oid (nodeBB gs) >>= return . inLowerPartOfBBox x y) == Just True
-       matchingNodeGate = (matchingNode >>= (\ oid ->
-           let Just fresh = freshGateName graph oid in -- this is safe
-           return $ OPath oid fresh))
-       maybeProducer = matchingNode >>= return . isClickProducer
-       maybeGraph = addMaybeGate matchingNodeGate maybeProducer graph
-       newGraph = (case maybeGraph of
-                       Just g -> g
-                       Nothing -> graph)
+       searchResult = findBoundingBox x y (gateBB gs)
+       createGateAt gs x y =
+          (newGraph,matchingNodeGate)
+          where
+            matchingNode = findBoundingBox x y (nodeBB gs)
+            isClickProducer oid =
+              (Map.lookup oid (nodeBB gs) >>= return . inLowerPartOfBBox x y) == Just True
+            matchingNodeGate = (matchingNode >>= (\ oid ->
+               let Just fresh = freshGateName graph oid in -- this is safe
+               return $ OPath oid fresh))
+            maybeProducer = matchingNode >>= return . isClickProducer
+            maybeGraph = addMaybeGate matchingNodeGate maybeProducer graph
+            newGraph = (case maybeGraph of
+                           Just g -> g
+                           Nothing -> graph)
 
+updateBoundingBoxes gsM =
+   modifyMVar_  gsM (\gs -> return $ createGraphState (totalGraph gs) (presentation gs))
 
 -- Handle a click based on the current state
 handleClick drawStateM gsM drawWidget = do
@@ -255,6 +274,7 @@ handleClick drawStateM gsM drawWidget = do
                     nodeBB = newNodeBB })
         widgetQueueDraw drawWidget
       DSelect -> do
+        putStrLn ("Click handled at position " ++ (show coords))
         let searchResult = findBoundingBox x y (nodeBB gs)
         newSelection <- case searchResult of
           Nothing -> return NoSelection
@@ -275,13 +295,13 @@ handleClick drawStateM gsM drawWidget = do
           Nothing ->
              gotoState DEdge
           Just edge -> do
-             putStrLn ("Current edges list is "++(show $ edgesList newGraph))
              setGS (gs {
                totalGraph = newGraph {
                   edgesList=Set.insert edge (edgesList newGraph) } })
              gotoState DEdge
         widgetQueueDraw drawWidget
       _ -> putStrLn ("Click handled at position " ++ (show coords))
+    liftIO $ updateBoundingBoxes gsM
     return True
 
 

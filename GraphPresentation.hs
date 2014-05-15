@@ -17,7 +17,7 @@ nodeSemiHeight = 20.0
 nodeGateSpacing = 15.0
 nodeGateVertOffset = 10.0
 gateRadius = 3.0
-gateBBhalfSize = 4.0
+gateBBhalfSize = 5.0
 
 -- Where to draw outer gates
 outerGateOffset = 60.0
