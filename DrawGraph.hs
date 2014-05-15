@@ -158,9 +158,13 @@ updateScene drawStateM gsM drawWidget = do
     (x,y) <- eventCoordinates
     liftIO $ modifyMVar_ gsM (\gs -> return $ gs { lastMouse = (x,y) })
     drawState <- liftIO $ readMVar drawStateM
-    case drawState of
-      DDrawing _ _ _ -> liftIO $ widgetQueueDraw drawWidget
-      DNode -> liftIO $ widgetQueueDraw drawWidget
+    liftIO $ case drawState of
+      DDrawing _ _ _ -> widgetQueueDraw drawWidget
+      DNode -> widgetQueueDraw drawWidget
+      DMoving id -> do 
+       modifyMVar_ gsM (\gs -> return $ gs {
+          presentation = Map.insert id (x,y) $ presentation gs })
+       widgetQueueDraw drawWidget
       _ -> return ()
     return True
 
@@ -211,7 +215,7 @@ addMaybeGate (Just (OPath oid gateName)) (Just producer) g@(OGraph _ nodes _)  =
 addMaybeGate _ _ _ = Nothing
 
 -- Handle a click based on the current state
-handleClick drawStateM gsM drawWidget= do
+handleClick drawStateM gsM drawWidget = do
     coords <- eventCoordinates
     let (x,y) = coords
     st <- liftIO (readMVar drawStateM)
@@ -233,9 +237,11 @@ handleClick drawStateM gsM drawWidget= do
         widgetQueueDraw drawWidget
       DSelect -> do
         let searchResult = findBoundingBox x y (nodeBB gs)
-        newSelection <- return (case searchResult of
-          Nothing -> NoSelection
-          Just id -> SelectNode id)
+        newSelection <- case searchResult of
+          Nothing -> return NoSelection
+          Just id -> do
+            gotoState (DMoving id)
+            return $ SelectNode id
         setGS (gs { selection = newSelection })
         widgetQueueDraw drawWidget
       DEdge -> do
@@ -271,3 +277,27 @@ handleClick drawStateM gsM drawWidget= do
         widgetQueueDraw drawWidget
       _ -> putStrLn ("Click handled at position " ++ (show coords))
     return True
+
+
+handleRelease drawStateM gsM drawWidget = do
+    st <- liftIO (readMVar drawStateM)
+    let gotoState newState = modifyMVar_ drawStateM (\_ -> return newState)
+    (x,y) <- eventCoordinates
+    liftIO $ case st of
+      DMoving _ -> do
+        modifyMVar_ gsM (\gs -> return $
+          ((createGraphState (totalGraph gs) (presentation gs)) { selection = (selection gs)}))
+        gotoState DSelect
+        widgetQueueDraw drawWidget
+      _ -> return ()
+    return True
+
+changeDrawingState gsM drawStateM newState = do
+   modifyMVar_ drawStateM (\oldState -> do 
+     case (oldState,newState) of
+       (DSelect,DNode) -> resetSelection
+       (DSelect,DEdge) -> resetSelection
+       _ -> return ()
+     return newState)
+   where
+     resetSelection = modifyMVar_ gsM (\gs -> return $ gs { selection = NoSelection })

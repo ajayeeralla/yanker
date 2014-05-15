@@ -24,7 +24,7 @@ main = do
     -- State of the interface
     graphState <- newMVar defaultGraphState
     drawState <- newMVar DSelect
-    let changeDrawingState newState = modifyMVar_ drawState (\_ -> return newState)
+    let changeState = changeDrawingState graphState drawState
 
     -- GUI setup
     initGUI
@@ -44,11 +44,12 @@ main = do
     on drawWidget draw (drawScene drawState graphState)
     on drawWidget motionNotifyEvent (updateScene drawState graphState drawWidget)
     on drawWidget buttonPressEvent (handleClick drawState graphState drawWidget)
+    on drawWidget buttonReleaseEvent (handleRelease drawState graphState drawWidget)
 
     -- Buttons
-    selectButton `onToolButtonClicked` (changeDrawingState DSelect)
-    nodeButton `onToolButtonClicked` (changeDrawingState DNode)
-    edgeButton `onToolButtonClicked` (changeDrawingState DEdge)
+    selectButton `onToolButtonClicked` (changeState DSelect)
+    nodeButton `onToolButtonClicked` (changeState DNode)
+    edgeButton `onToolButtonClicked` (changeState DEdge)
     
     widgetShowAll window
     mainGUI
