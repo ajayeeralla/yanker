@@ -60,26 +60,28 @@ renderGrp = foldl (\ accu elem -> accu ++ " " ++ (renderGS elem)) ""
 
 -- Lambek types, without products
 data LambekFun =
-       LFAtom String
+       LFAtom { baseLF :: String, annotLF :: Maybe String }
      | LFLeft LambekFun LambekFun
      | LFRight LambekFun LambekFun
    deriving (Eq,Show,Ord)
 
 -- Pretty printing
-renderLF (LFAtom s) = s
+renderLF (LFAtom s Nothing) = s
+renderLF (LFAtom s (Just annot)) = s ++ "[" ++ annot ++ "]"
 renderLF (LFLeft b a) = (renderLF b) ++ "\\" ++ (renderLF a)
 renderLF (LFRight a b) = (renderLF a) ++ "/" ++ (renderLF b)
 
 -- Lambek skeletons (without products)
 data LambekSkel =
-      LSAtom String
+      LSAtom { baseLS :: String, annotLS :: Maybe String }
     | LSVar String
     | LSLeft LambekSkel LambekSkel
     | LSRight LambekSkel LambekSkel
    deriving (Eq,Show,Ord)
 
 -- Pretty printing
-renderLS (LSAtom s) = s
+renderLS (LSAtom s Nothing) = s
+renderLS (LSAtom s (Just annot)) = s ++ "[" ++ annot ++ "]"
 renderLS (LSVar s) = s -- TODO: find a way to distinguish between the two?
 renderLS (LSLeft a b) = (renderLS b) ++ "\\" ++ (renderLS a)
 renderLS (LSRight a b) = (renderLS a) ++ "/" ++ (renderLS b)
@@ -97,8 +99,8 @@ unionMap m1 m2 =
      m1
 
 -- Does this lambek type matches this Lambek skeleton ? If no, Nothing. Else, Just the corresponding type assignment
-matchSkeleton (LSAtom a) (LFAtom b) =
-   if a == b then Just Map.empty else Nothing
+matchSkeleton x@(LSAtom a annotA) y@(LFAtom b annotB) =
+   if a == b && annotA == annotB then Just Map.empty else Nothing
 matchSkeleton (LSVar x) t = Just $ Map.insert x t Map.empty
 matchSkeleton (LSLeft a1 b1) (LFLeft a2 b2) = do
    s1 <- matchSkeleton a1 a2
@@ -117,12 +119,20 @@ data LambekType = LTAtom String | LTLeft LambekType LambekType | LTRight LambekT
 
 ------- PARSING ----------
 
-lexerLF = P.makeTokenParser (emptyDef { reservedOpNames = ["/","\\"] })
+lexerLF = P.makeTokenParser (emptyDef { reservedOpNames = ["/","\\","[","]"] })
 whiteSpaceLF = P.whiteSpace lexerLF
 
 termLF :: Parser LambekFun
-termLF = (LFAtom <$> P.identifier lexerLF)
-     <|> (P.parens lexerLF parserLF)
+termLF = atomLF <|> (P.parens lexerLF parserLF)
+     where
+       atomLF = do
+         id <- P.identifier lexerLF
+         bracketParser id <|> (return $ LFAtom id Nothing)
+       bracketParser baseId = do
+         char '['
+         annot <- P.identifier lexerLF
+         char ']'
+         return $ LFAtom baseId . Just $ annot
 
 termLFwhiteSpace = whiteSpaceLF >> termLF
 
