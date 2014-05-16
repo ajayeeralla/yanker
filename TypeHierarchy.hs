@@ -66,10 +66,23 @@ data LambekFun =
    deriving (Eq,Show,Ord)
 
 -- Pretty printing
-renderLF (LFAtom s Nothing) = s
-renderLF (LFAtom s (Just annot)) = s ++ "[" ++ annot ++ "]"
-renderLF (LFLeft b a) = (renderLF b) ++ "\\" ++ (renderLF a)
-renderLF (LFRight a b) = (renderLF a) ++ "/" ++ (renderLF b)
+data ParenthesisNeeded = NoParen | AlwaysParen | ParenLeft | ParenRight
+addParen str = "("++str++")"
+
+renderLFparen (LFAtom s Nothing) _ = s
+renderLFparen (LFAtom s (Just annot)) _ = s ++ "[" ++ annot ++ "]"
+
+renderLFparen (LFLeft b a) NoParen =
+  (renderLFparen b AlwaysParen) ++ "\\" ++ (renderLFparen a ParenRight)
+renderLFparen t@(LFLeft _ _) ParenRight = renderLFparen t NoParen
+renderLFparen t@(LFLeft _ _) _ = addParen $ renderLFparen t NoParen
+
+renderLFparen (LFRight a b) NoParen =
+  (renderLFparen a ParenLeft) ++ "/" ++ (renderLFparen b AlwaysParen)
+renderLFparen t@(LFRight _ _) ParenLeft = renderLFparen t NoParen
+renderLFparen t@(LFRight _ _) _ = addParen $ renderLFparen t NoParen
+
+renderLF x = renderLFparen x NoParen
 
 -- Lambek skeletons (without products)
 data LambekSkel =
@@ -119,32 +132,52 @@ data LambekType = LTAtom String | LTLeft LambekType LambekType | LTRight LambekT
 
 ------- PARSING ----------
 
-lexerLF = P.makeTokenParser (emptyDef { reservedOpNames = ["/","\\","[","]"] })
-whiteSpaceLF = P.whiteSpace lexerLF
+lexerL = P.makeTokenParser (emptyDef { reservedOpNames = ["/","\\","[","]"] })
+whiteSpaceL = P.whiteSpace lexerL
+myIdentifier = many (noneOf "/\\[],\n")
 
 termLF :: Parser LambekFun
-termLF = atomLF <|> (P.parens lexerLF parserLF)
-     where
-       atomLF = do
-         id <- P.identifier lexerLF
-         bracketParser id <|> (return $ LFAtom id Nothing)
-       bracketParser baseId = do
-         char '['
-         annot <- P.identifier lexerLF
-         char ']'
-         return $ LFAtom baseId . Just $ annot
+termLF = (atomLF LFAtom) <|> (P.parens lexerL parserLF)
 
-termLFwhiteSpace = whiteSpaceLF >> termLF
+atomLF atomFun = do
+  id <- (P.identifier lexerL)
+  bracketParser id <|> (return $ atomFun id Nothing)
+  where
+    bracketParser baseId = do
+      char '['
+      annot <- myIdentifier
+      char ']'
+      return $ atomFun baseId . Just $ annot
 
-tableLF = [ [Infix (whiteSpaceLF >> char '/' >> return LFRight) AssocLeft ],
-            [Infix (whiteSpaceLF >> char '\\' >> return LFLeft) AssocRight ] ]
+termLFwhiteSpace = whiteSpaceL >> termLF
+
+tableLF = [ [Infix (whiteSpaceL >> char '/' >> return LFRight) AssocLeft ],
+            [Infix (whiteSpaceL >> char '\\' >> return LFLeft) AssocRight ] ]
 
 parserLF = buildExpressionParser tableLF termLFwhiteSpace
 
 parserLFeof = do
-   whiteSpaceLF
+   whiteSpaceL
    x <- parserLF
-   whiteSpaceLF
+   whiteSpaceL
    eof
    return x
 
+---- Parsing for skeletons ----
+
+termLS :: Parser LambekSkel
+termLS = (atomLF LSAtom) <|> (P.parens lexerL parserLS)
+
+termLSwhiteSpace = whiteSpaceL >> termLS
+
+tableLS = [ [Infix (whiteSpaceL >> char '/' >> return LSRight) AssocLeft ],
+            [Infix (whiteSpaceL >> char '\\' >> return LSLeft) AssocRight ] ]
+
+parserLS = buildExpressionParser tableLS termLSwhiteSpace
+
+parserLSeof = do
+  whiteSpaceL
+  x <- parserLS
+  whiteSpaceL
+  eof
+  return x
