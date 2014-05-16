@@ -25,7 +25,7 @@ defaultGraphState =
 
 loadTypeDatabase :: IO (ListStore (Int,LambekFun))
 loadTypeDatabase = do
-    typeFile <- readFile "short.types.db"
+    typeFile <- readFile "data/short.types.db"
     typeLines <- return $ lines typeFile
     let typeDB = sequence . List.map (parse parserWithEof "") $ typeLines
     listTypes <- case typeDB of
@@ -43,7 +43,7 @@ loadTypeDatabase = do
         return res
 
 createAddDialog builder skelStore = do
-    builderAddFromFile builder "add-skeleton-dialog.glade"
+    builderAddFromFile builder "gui/add-skeleton-dialog.glade"
     addSkeletonDialog <- builderGetObject builder castToDialog "dialog1"
     cancelButton <- builderGetObject builder castToButton "buttoncancel"
     addButton <- builderGetObject builder castToButton "buttonadd"
@@ -79,7 +79,7 @@ main = do
     -- GUI setup
     initGUI
     builder <- builderNew
-    builderAddFromFile builder "interface.glade"
+    builderAddFromFile builder "gui/interface.glade"
 
     -- Get interesting widgets (main window)
     window <- builderGetObject builder castToWindow "window1"
