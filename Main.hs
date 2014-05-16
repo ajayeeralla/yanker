@@ -23,19 +23,18 @@ defaultGraphState =
                      [] (Set.empty)) in
     createGraphState initGraph Map.empty
 
-loadTypeDatabase :: IO (ListStore (Int,LambekFun))
+loadTypeDatabase :: IO [(Int,LambekFun)]
 loadTypeDatabase = do
     typeFile <- readFile "data/short.types.db"
     typeLines <- return $ lines typeFile
     let typeDB = sequence . List.map (parse parserWithEof "") $ typeLines
-    listTypes <- case typeDB of
+    case typeDB of
        Left error -> do
          print error
          return []
        Right db -> do
          -- putStrLn (show db)
          return db
-    listStoreNew listTypes
     where
       parserWithEof = do
         res <- parserLineDB
@@ -73,8 +72,10 @@ main = do
     drawState <- newMVar DSelect
     let changeState = changeDrawingState graphState drawState
         
-    -- Create skeleton store
+    -- Create stores and lists
     skelStore <- listStoreNew []
+    typeList <- loadTypeDatabase
+    typeStore <- listStoreNew typeList
 
     -- GUI setup
     initGUI
@@ -100,6 +101,9 @@ main = do
     on drawWidget motionNotifyEvent (updateScene drawState graphState drawWidget)
     on drawWidget buttonPressEvent (handleClick drawState graphState drawWidget)
     on drawWidget buttonReleaseEvent (handleRelease drawState graphState drawWidget)
+    -- on skelStore rowsReordered (rebuildFilters
+    -- rowInserted (TreePath -> TreeIter -> IO ())
+    -- rowDeleted (TreePath -> TreeIter -> IO ())
 
     -- Buttons
     selectButton `onToolButtonClicked` (changeState DSelect)
@@ -108,7 +112,6 @@ main = do
     on addSkelButton buttonActivated (createAddDialog builder skelStore)
 
     -- Load type database
-    typeStore <- loadTypeDatabase
     treeViewSetModel treeViewTypes typeStore
 
     colOccur <- Model.treeViewColumnNew

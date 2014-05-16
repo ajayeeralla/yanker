@@ -87,7 +87,7 @@ renderLF x = renderLFparen x NoParen
 -- Lambek skeletons (without products)
 data LambekSkel =
       LSAtom { baseLS :: String, annotLS :: Maybe String }
-    | LSVar String
+    | LSVar Int
     | LSLeft LambekSkel LambekSkel
     | LSRight LambekSkel LambekSkel
    deriving (Eq,Show,Ord)
@@ -95,7 +95,7 @@ data LambekSkel =
 -- Pretty printing
 renderLS (LSAtom s Nothing) = s
 renderLS (LSAtom s (Just annot)) = s ++ "[" ++ annot ++ "]"
-renderLS (LSVar s) = s -- TODO: find a way to distinguish between the two?
+renderLS (LSVar s) = (show s)
 renderLS (LSLeft a b) = (renderLS b) ++ "\\" ++ (renderLS a)
 renderLS (LSRight a b) = (renderLS a) ++ "/" ++ (renderLS b)
 
@@ -123,6 +123,28 @@ matchSkeleton (LSRight a1 b1) (LFRight a2 b2) = do
    s1 <- matchSkeleton a1 a2
    s2 <- matchSkeleton b1 b2
    unionMap s1 s2
+
+-- Given a list of skeletons and a list of types
+-- filter the types with the skeletons (each type is paired with
+-- the first skeleton it meets)
+dispatchTypes :: (a -> LambekFun) -> [LambekSkel] -> [a] -> ([[a]],[a])
+dispatchTypes getType skels types =
+  reverseOutput $ foldl addTypeToAccu (initSlots,[]) types
+  where
+    initSlots = map (\x -> (x,[])) skels
+    addTypeToAccu (slots,noMatch) tp =
+      case findMatching slots tp of
+        Just newSlots -> (newSlots,noMatch)
+        Nothing -> (slots,tp:noMatch)
+    findMatching [] _ = Nothing
+    findMatching ((skel,slot):tail) tp =
+      if matchSkeleton skel (getType tp) /= Nothing then
+        Just $ (skel,tp:slot):tail
+      else do
+        rest <- findMatching tail tp
+        return $ (skel,slot):rest
+    reverseOutput (slots,noMatch) =
+      (map (reverse . snd) slots, reverse noMatch)
 
 -- Lambek types, with products
 data LambekType = LTAtom String | LTLeft LambekType LambekType | LTRight LambekType LambekType | LTProd LambekType LambekType
@@ -166,7 +188,11 @@ parserLFeof = do
 ---- Parsing for skeletons ----
 
 termLS :: Parser LambekSkel
-termLS = (atomLF LSAtom) <|> (P.parens lexerL parserLS)
+termLS = natParser <|> (atomLF LSAtom) <|> (P.parens lexerL parserLS)
+    where
+      natParser = do
+        x <- P.natural lexerL
+        return $ LSVar (fromIntegral x)
 
 termLSwhiteSpace = whiteSpaceL >> termLS
 
