@@ -1,7 +1,16 @@
 module TypeHierarchy where
 
 import Data.List
+import Data.Functor
 import Data.Monoid
+
+import Text.ParserCombinators.ReadPrec
+import Text.ParserCombinators.Parsec.Token as P
+import Text.ParserCombinators.Parsec
+import Text.ParserCombinators.Parsec.Expr
+import Text.ParserCombinators.Parsec.Language
+
+import qualified Data.Map.Strict as Map
 -- import Data.Semigroup
 
 -- Simple type in a pregroup: a base type and an exponent. +1 means right, -1 means left
@@ -50,14 +59,82 @@ invGrp = reverse . (map invGrpS)
 renderGrp = foldl (\ accu elem -> accu ++ " " ++ (renderGS elem)) ""
 
 -- Lambek types, without products
-data LambekFun = LFAtom String | LFLeft LambekFun LambekFun | LFRight LambekFun LambekFun
+data LambekFun =
+       LFAtom String
+     | LFLeft LambekFun LambekFun
+     | LFRight LambekFun LambekFun
+   deriving (Eq,Show,Ord)
+
 -- Pretty printing
 renderLF (LFAtom s) = s
 renderLF (LFLeft b a) = (renderLF b) ++ "\\" ++ (renderLF a)
 renderLF (LFRight a b) = (renderLF a) ++ "/" ++ (renderLF b)
 
+-- Lambek skeletons (without products)
+data LambekSkel =
+      LSAtom String
+    | LSVar String
+    | LSLeft LambekSkel LambekSkel
+    | LSRight LambekSkel LambekSkel
+   deriving (Eq,Show,Ord)
+
+-- Pretty printing
+renderLS (LSAtom s) = s
+renderLS (LSVar s) = s -- TODO: find a way to distinguish between the two?
+renderLS (LSLeft a b) = (renderLS b) ++ "\\" ++ (renderLS a)
+renderLS (LSRight a b) = (renderLS a) ++ "/" ++ (renderLS b)
+
+-- Utility: unify two assignments
+unionMap m1 m2 =
+   Map.foldlWithKey
+     (\ m2 key value -> m2 >>= (\m2 -> case Map.lookup key m2 of
+        Nothing -> Just $ Map.insert key value m2
+        Just otherVal ->
+          if otherVal == value then
+             Just $ Map.insert key value m2
+          else Nothing))
+     (Just m2)
+     m1
+
+-- Does this lambek type matches this Lambek skeleton ? If no, Nothing. Else, Just the corresponding type assignment
+matchSkeleton (LSAtom a) (LFAtom b) =
+   if a == b then Just Map.empty else Nothing
+matchSkeleton (LSVar x) t = Just $ Map.insert x t Map.empty
+matchSkeleton (LSLeft a1 b1) (LFLeft a2 b2) = do
+   s1 <- matchSkeleton a1 a2
+   s2 <- matchSkeleton b1 b2
+   unionMap s1 s2
+matchSkeleton (LSRight a1 b1) (LFRight a2 b2) = do
+   s1 <- matchSkeleton a1 a2
+   s2 <- matchSkeleton b1 b2
+   unionMap s1 s2
+
 -- Lambek types, with products
 data LambekType = LTAtom String | LTLeft LambekType LambekType | LTRight LambekType LambekType | LTProd LambekType LambekType
 
-instance Semigroup LambekType where
-   (<>) = LTProd
+-- instance Semigroup LambekType where
+--   (<>) = LTProd
+
+------- PARSING ----------
+
+lexerLF = P.makeTokenParser (emptyDef { reservedOpNames = ["/","\\"] })
+whiteSpaceLF = P.whiteSpace lexerLF
+
+termLF :: Parser LambekFun
+termLF = (LFAtom <$> P.identifier lexerLF)
+     <|> (P.parens lexerLF parserLF)
+
+termLFwhiteSpace = whiteSpaceLF >> termLF
+
+tableLF = [ [Infix (whiteSpaceLF >> char '/' >> return LFRight) AssocLeft ],
+            [Infix (whiteSpaceLF >> char '\\' >> return LFLeft) AssocRight ] ]
+
+parserLF = buildExpressionParser tableLF termLFwhiteSpace
+
+parserLFeof = do
+   whiteSpaceLF
+   x <- parserLF
+   whiteSpaceLF
+   eof
+   return x
+

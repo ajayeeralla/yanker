@@ -286,9 +286,11 @@ handleClick drawStateM gsM drawWidget = do
       DEdge -> do
         let (newGraph,searchResult) = getOrCreateGate gs x y
         setGS (gs { totalGraph = newGraph })
-        gotoState $ case searchResult of
-          Nothing -> DEdge
-          Just path -> DDrawing path x y
+        case searchResult of
+          Nothing -> gotoState DEdge
+          Just path -> do
+            let (origX,origY) = getGatePos newGraph (presentation gs) path
+            gotoState $ DDrawing path origX origY
       DDrawing gate _ _ -> do
         let (newGraph,maybeGate) = getOrCreateGate gs x y
         case maybeGate >>= (makeEdge newGraph gate) of
