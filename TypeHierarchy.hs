@@ -112,6 +112,7 @@ unionMap m1 m2 =
      m1
 
 -- Does this lambek type matches this Lambek skeleton ? If no, Nothing. Else, Just the corresponding type assignment
+matchSkeleton :: LambekSkel -> LambekFun -> Maybe (Map.Map Int LambekFun)
 matchSkeleton x@(LSAtom a annotA) y@(LFAtom b annotB) =
    if a == b && annotA == annotB then Just Map.empty else Nothing
 matchSkeleton (LSVar x) t = Just $ Map.insert x t Map.empty
@@ -123,6 +124,7 @@ matchSkeleton (LSRight a1 b1) (LFRight a2 b2) = do
    s1 <- matchSkeleton a1 a2
    s2 <- matchSkeleton b1 b2
    unionMap s1 s2
+matchSkeleton _ _ = Nothing
 
 -- Given a list of skeletons and a list of types
 -- filter the types with the skeletons (each type is paired with

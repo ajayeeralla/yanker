@@ -8,6 +8,7 @@ import Control.Monad.State
 import Text.ParserCombinators.Parsec
 import Data.Set as Set
 import Data.Map as Map
+import Data.Foldable as Fold
 import Control.Concurrent.MVar
 import Control.Concurrent.MVar
 
@@ -23,7 +24,7 @@ defaultGraphState =
                      [] (Set.empty)) in
     createGraphState initGraph Map.empty
 
-loadTypeDatabase :: IO [(Int,LambekFun)]
+loadTypeDatabase :: IO [(Int,LambekFun,Bool)]
 loadTypeDatabase = do
     typeFile <- readFile "data/short.types.db"
     typeLines <- return $ lines typeFile
@@ -37,11 +38,11 @@ loadTypeDatabase = do
          return db
     where
       parserWithEof = do
-        res <- parserLineDB
+        (a,b) <- parserLineDB
         eof
-        return res
+        return (a,b,True) -- True is the default visibility
 
-createAddDialog builder skelStore = do
+createAddDialog builder skelStore = do -- skelUniqueId = do
     builderAddFromFile builder "gui/add-skeleton-dialog.glade"
     addSkeletonDialog <- builderGetObject builder castToDialog "dialog1"
     cancelButton <- builderGetObject builder castToButton "buttoncancel"
@@ -62,14 +63,39 @@ createAddDialog builder skelStore = do
             appendToStore lambekSkel
             putStrLn (show lambekSkel)
             widgetHide dialog
-      appendToStore lambekSkel =
-         listStoreAppend skelStore lambekSkel
+      appendToStore lambekSkel = do
+--        skelId <- readMVar skelUniqueId 
+        listStoreAppend skelStore lambekSkel -- (skelId,lambekSkel)
+--        putMVar skelUniqueId (skelId + 1)
+
+updateCurrentTypes modelTypes modelSkel viewSkel = do
+    selection <- treeViewGetSelection viewSkel
+    selected <- treeSelectionGetSelected selection
+    let idCol = makeColumnIdBool 0
+    Fold.forM_ selected $ \treeIter -> do
+      let idx = listStoreIterToIndex treeIter
+      skel <- listStoreGetValue modelSkel idx
+      nbTypes <- listStoreGetSize modelTypes
+      Control.Monad.State.forM_ (seq nbTypes) $ \i -> do
+        (nbOccurs, curType, _) <- listStoreGetValue modelTypes i
+        let isVisible = matchSkeleton skel curType /= Nothing
+        listStoreSetValue modelTypes i (nbOccurs,curType,isVisible)
+    where
+      seq :: Int -> [Int]
+      seq 0 = []
+      seq n = (n-1):(seq $ n-1)
+
+
+visCol :: ColumnId (Int, LambekFun, Bool) Bool
+visCol = makeColumnIdBool 0
 
 main :: IO ()
 main = do
     -- State of the interface
     graphState <- newMVar defaultGraphState
     drawState <- newMVar DSelect
+    -- skelUniqueId <- newMVar 1 -- next unique id for skeletons
+    
     let changeState = changeDrawingState graphState drawState
         
     -- Create stores and lists
@@ -101,6 +127,7 @@ main = do
     on drawWidget motionNotifyEvent (updateScene drawState graphState drawWidget)
     on drawWidget buttonPressEvent (handleClick drawState graphState drawWidget)
     on drawWidget buttonReleaseEvent (handleRelease drawState graphState drawWidget)
+    on treeViewSkels cursorChanged (updateCurrentTypes typeStore skelStore treeViewSkels)
     -- on skelStore rowsReordered (rebuildFilters
     -- rowInserted (TreePath -> TreeIter -> IO ())
     -- rowDeleted (TreePath -> TreeIter -> IO ())
@@ -109,17 +136,16 @@ main = do
     selectButton `onToolButtonClicked` (changeState DSelect)
     nodeButton `onToolButtonClicked` (changeState DNode)
     edgeButton `onToolButtonClicked` (changeState DEdge)
-    on addSkelButton buttonActivated (createAddDialog builder skelStore)
+    on addSkelButton buttonActivated (createAddDialog builder skelStore)-- skelUniqueId)
 
     -- Load type database
-    treeViewSetModel treeViewTypes typeStore
-
+ 
     colOccur <- Model.treeViewColumnNew
     Model.treeViewColumnSetTitle colOccur "Num"
     renderer <- Model.cellRendererTextNew
     Model.cellLayoutPackStart colOccur renderer False
     Model.cellLayoutSetAttributes colOccur renderer typeStore
-           $ (\(occur,tp) -> [Model.cellText := show occur])
+           $ (\(occur,tp,_) -> [Model.cellText := show occur])
     Model.treeViewAppendColumn treeViewTypes colOccur
     
     col <- Model.treeViewColumnNew
@@ -127,8 +153,15 @@ main = do
     renderer <- Model.cellRendererTextNew
     Model.cellLayoutPackStart col renderer False
     Model.cellLayoutSetAttributes col renderer typeStore
-           $ (\(occur,tp) -> [Model.cellText := renderLF tp])
+           $ (\(occur,tp,_) -> [Model.cellText := renderLF tp])
     Model.treeViewAppendColumn treeViewTypes col
+
+    fModel <- treeModelFilterNew typeStore []
+    customStoreSetColumn typeStore visCol
+           $ (\(_,_,visibility) -> visibility)
+    treeModelFilterSetVisibleColumn fModel visCol
+    
+    treeViewSetModel treeViewTypes fModel
 
     -- Add skeleton list
     treeViewSetModel treeViewSkels skelStore
