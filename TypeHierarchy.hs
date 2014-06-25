@@ -126,6 +126,10 @@ matchSkeleton (LSRight a1 b1) (LFRight a2 b2) = do
    unionMap s1 s2
 matchSkeleton _ _ = Nothing
 
+-- More convenient syntax
+isMatchedBy :: LambekFun -> LambekSkel -> Bool
+isMatchedBy fun skel = matchSkeleton skel fun /= Nothing
+
 -- Given a list of skeletons and a list of types
 -- filter the types with the skeletons (each type is paired with
 -- the first skeleton it meets)

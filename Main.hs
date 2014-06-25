@@ -18,13 +18,22 @@ import TypeHierarchy
 import TypeDatabase
 import Data.List as List
 
+-- The type of an entry in the type list,
+-- storing its number of ccurrences, visibility
+-- and the index of the first skeleton matching it
+data TypeEntry = TypeEntry {
+    nbOccurrences :: Int
+  , lambekType :: LambekFun
+  , currentlyVisible :: Bool
+  , firstSkelIndex :: Int }
+
 defaultGraphState :: GraphState
 defaultGraphState =
     let initGraph = (OGraph [(OGate "a" False), (OGate "b" True), (OGate "c" True)]
                      [] (Set.empty)) in
     createGraphState initGraph Map.empty
 
-loadTypeDatabase :: IO [(Int,LambekFun,Bool)]
+loadTypeDatabase :: IO [TypeEntry]
 loadTypeDatabase = do
     typeFile <- readFile "data/short.types.db"
     typeLines <- return $ lines typeFile
@@ -40,9 +49,9 @@ loadTypeDatabase = do
       parserWithEof = do
         (a,b) <- parserLineDB
         eof
-        return (a,b,True) -- True is the default visibility
+        return $ TypeEntry a b True 0 -- True is the default visibility
 
-createAddDialog builder skelStore = do -- skelUniqueId = do
+createAddDialog builder skelStore typeStore = do -- skelUniqueId = do
     builderAddFromFile builder "gui/add-skeleton-dialog.glade"
     addSkeletonDialog <- builderGetObject builder castToDialog "dialog1"
     cancelButton <- builderGetObject builder castToButton "buttoncancel"
@@ -64,9 +73,8 @@ createAddDialog builder skelStore = do -- skelUniqueId = do
             putStrLn (show lambekSkel)
             widgetHide dialog
       appendToStore lambekSkel = do
---        skelId <- readMVar skelUniqueId 
-        listStoreAppend skelStore lambekSkel -- (skelId,lambekSkel)
---        putMVar skelUniqueId (skelId + 1)
+        listStoreAppend skelStore lambekSkel
+        updateSkelIndices typeStore skelStore
 
 updateCurrentTypes modelTypes modelSkel viewSkel = do
     selection <- treeViewGetSelection viewSkel
@@ -76,17 +84,39 @@ updateCurrentTypes modelTypes modelSkel viewSkel = do
       let idx = listStoreIterToIndex treeIter
       skel <- listStoreGetValue modelSkel idx
       nbTypes <- listStoreGetSize modelTypes
-      Control.Monad.State.forM_ (seq nbTypes) $ \i -> do
-        (nbOccurs, curType, _) <- listStoreGetValue modelTypes i
-        let isVisible = matchSkeleton skel curType /= Nothing
-        listStoreSetValue modelTypes i (nbOccurs,curType,isVisible)
-    where
-      seq :: Int -> [Int]
-      seq 0 = []
-      seq n = (n-1):(seq $ n-1)
+      forNTimes nbTypes $ \i -> do
+        entry <- listStoreGetValue modelTypes i
+        let newVis = firstSkelIndex entry == idx
+        listStoreSetValue modelTypes i $ entry { currentlyVisible = newVis }
 
+forNTimes n =
+   Control.Monad.State.forM_ (List.reverse . seq $ n)
+   where
+     seq :: Int -> [Int]
+     seq 0 = []
+     seq n = (n-1):(seq $ n-1)
 
-visCol :: ColumnId (Int, LambekFun, Bool) Bool
+updateSkelIndices modelTypes modelSkel = do
+    nbSkels <- listStoreGetSize modelSkel
+    nbTypes <- listStoreGetSize modelTypes
+    -- for each type
+    forNTimes nbTypes $ \i -> do
+      entry <- listStoreGetValue modelTypes i
+      -- reset its current skeleton
+      listStoreSetValue modelTypes i (entry { firstSkelIndex = -1 })
+    
+    -- for each skeleton
+    forNTimes nbSkels $ \j -> do
+      skel <- listStoreGetValue modelSkel j
+      -- for each type
+      forNTimes nbTypes $ \i -> do
+        entry <- listStoreGetValue modelTypes i
+        if firstSkelIndex entry == -1 && lambekType entry `isMatchedBy` skel then
+            listStoreSetValue modelTypes i (entry { firstSkelIndex = j })
+        else
+            return ()
+
+visCol :: ColumnId TypeEntry Bool
 visCol = makeColumnIdBool 0
 
 main :: IO ()
@@ -136,7 +166,7 @@ main = do
     selectButton `onToolButtonClicked` (changeState DSelect)
     nodeButton `onToolButtonClicked` (changeState DNode)
     edgeButton `onToolButtonClicked` (changeState DEdge)
-    on addSkelButton buttonActivated (createAddDialog builder skelStore)-- skelUniqueId)
+    on addSkelButton buttonActivated (createAddDialog builder skelStore typeStore)
 
     -- Load type database
  
@@ -145,7 +175,7 @@ main = do
     renderer <- Model.cellRendererTextNew
     Model.cellLayoutPackStart colOccur renderer False
     Model.cellLayoutSetAttributes colOccur renderer typeStore
-           $ (\(occur,tp,_) -> [Model.cellText := show occur])
+           $ (\entry -> [Model.cellText := show . nbOccurrences $ entry])
     Model.treeViewAppendColumn treeViewTypes colOccur
     
     col <- Model.treeViewColumnNew
@@ -153,12 +183,11 @@ main = do
     renderer <- Model.cellRendererTextNew
     Model.cellLayoutPackStart col renderer False
     Model.cellLayoutSetAttributes col renderer typeStore
-           $ (\(occur,tp,_) -> [Model.cellText := renderLF tp])
+           $ (\entry -> [Model.cellText := renderLF . lambekType $ entry])
     Model.treeViewAppendColumn treeViewTypes col
 
     fModel <- treeModelFilterNew typeStore []
-    customStoreSetColumn typeStore visCol
-           $ (\(_,_,visibility) -> visibility)
+    customStoreSetColumn typeStore visCol currentlyVisible
     treeModelFilterSetVisibleColumn fModel visCol
     
     treeViewSetModel treeViewTypes fModel
