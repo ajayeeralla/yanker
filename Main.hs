@@ -149,6 +149,7 @@ main = do
     selectButton <- builderGetObject builder castToToolButton "selectbutton"
     nodeButton <- builderGetObject builder castToToolButton "nodebutton"
     edgeButton <- builderGetObject builder castToToolButton "edgebutton"
+    delElemButton <- builderGetObject builder castToToolButton "deleteelement"
     treeViewTypes <- builderGetObject builder castToTreeView "treeview2"
     treeViewSkels <- builderGetObject builder castToTreeView "treeview1"
     addSkelButton <- builderGetObject builder castToButton "buttonaddrule"
@@ -170,6 +171,7 @@ main = do
     selectButton `onToolButtonClicked` (changeState DSelect)
     nodeButton `onToolButtonClicked` (changeState DNode)
     edgeButton `onToolButtonClicked` (changeState DEdge)
+    delElemButton `onToolButtonClicked` (changeState DDelete)
     on addSkelButton buttonActivated (createAddDialog builder skelStore typeStore)
     on delSkelButton buttonActivated (deleteCurrentSkel skelStore treeViewSkels)
 

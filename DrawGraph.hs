@@ -3,6 +3,7 @@ module DrawGraph where
 -- Data structures
 import Data.List as List
 import Data.Set as Set
+import Data.Foldable as Fold
 import qualified Data.Map.Strict as Map
 import OpenGraph as OG
 import GraphPresentation
@@ -15,7 +16,13 @@ import Graphics.UI.Gtk.Abstract.Widget
 
 
 -- Current state of the pointer
-data DrawingState = DSelect | DMoving OId | DNode | DEdge | DDrawing OPath Double Double
+data DrawingState =
+     DSelect
+   | DMoving OId
+   | DNode
+   | DEdge
+   | DDrawing OPath Double Double
+   | DDelete
      deriving (Eq)
 
 -- Current state of the object selection
@@ -260,7 +267,6 @@ handleClick drawStateM gsM drawWidget = do
     let gotoState newState = modifyMVar_ drawStateM (\_ -> return newState)
     let setGS newGS = modifyMVar_ gsM (\_ -> return newGS)
 
-        
     liftIO $ case st of
       DNode -> do
         let (OGraph gates nodes edges) = totalGraph gs
@@ -302,10 +308,81 @@ handleClick drawStateM gsM drawWidget = do
                   edgesList=Set.insert edge (edgesList newGraph) } })
              gotoState DEdge
         widgetQueueDraw drawWidget
-      _ -> putStrLn ("Click handled at position " ++ (show coords))
+      DDelete -> do
+        tryActions gsM (x,y) [deleteNearestGate, deleteNearestEdge, deleteNearestNode]
+        -- update bounding boxes
+        modifyMVar_ gsM (\ gs -> return $ createGraphState (totalGraph gs) (presentation gs))
+        widgetQueueDraw drawWidget
+      _ -> return ()
     liftIO $ updateBoundingBoxes gsM
     return True
+    where
+      tryActions :: a -> b -> [a -> b -> IO Bool] -> IO ()
+      tryActions gsM pos [] = return ()
+      tryActions gsM pos (filter:others) = do
+        successful <- filter gsM pos
+        if successful then
+          return ()
+        else
+          tryActions gsM pos others
+      deleteNearestGate gsM (x,y) = do
+        gs <- liftIO (readMVar gsM)
+        let searchResult = findBoundingBox x y (gateBB gs)
+        case searchResult of
+          Nothing -> return False
+          Just gate -> do
+            modifyMVar_ gsM (\ gs -> return $ gs { totalGraph = deleteGate (totalGraph gs) gate } )
+            return True
 
+      deleteNearestEdge gsM (x,y) = do
+        return False -- not implemented yet
+
+      deleteNearestNode gsM (x,y) = do
+        gs <- liftIO (readMVar gsM)
+        let searchResult = findBoundingBox x y (nodeBB gs)
+        case searchResult of
+          Nothing -> return False
+          Just node -> do
+             -- Delete all the gates in this node
+             let oldGraph = totalGraph gs
+             let newGraph = List.foldl deleteGate oldGraph . getGatesList oldGraph $ node
+             -- Delete the node itself
+             let newNodeList = List.filter (\ (id,_) -> id /= node) (nodesList newGraph)
+             -- TODO: update bounding boxes
+             modifyMVar_ gsM (\ gs -> return $ gs { totalGraph = newGraph { nodesList = newNodeList }})
+             return True
+        where
+          getGatesList :: OGraph -> OId -> [OPath]
+          getGatesList graph nodeId =
+            List.map (\ (OGate name _) -> OPath nodeId name) . getMaybeGates $ nodeId
+            where
+              getMaybeGates nodeId =
+                 let lst = List.find (\ (i,_) -> i == nodeId) (nodesList graph) in
+                 case lst of
+                   Nothing -> []
+                   Just (_,ONode _ gates) -> gates
+
+      deleteGate :: OGraph -> OPath -> OGraph
+      deleteGate oldGraph gate =
+        -- Delete any edge involving this gate
+        let edges = edgesList oldGraph in
+        let newEdges = Set.filter (\ (OEdge p1 p2) -> p1 /= gate && p2 /= gate) edges in
+        -- Delete the gate itself
+        let (OPath nodeId gateId) = gate in
+        let node = List.find (\ (id,_) -> id == nodeId) $ nodesList oldGraph in
+        let newNode = node >>= (\ (_,ONode nodeName gatesList) -> return $ ONode nodeName $ List.filter (\ (OGate g _) -> g /= gateId) gatesList) in
+        case newNode of
+          Nothing -> oldGraph
+          Just newNode ->
+            let newNodesList = replaceItem nodeId newNode $ nodesList oldGraph in
+            oldGraph { nodesList = newNodesList, edgesList = newEdges }
+        where
+          replaceItem :: Eq a => a -> b -> [(a,b)] -> [(a,b)]
+          replaceItem k v [] = []
+          replaceItem k v ((k1,_):t)
+            | (k1 == k) = (k,v):t
+          replaceItem k v (h:t) = h:(replaceItem k v t)
+          
 
 handleRelease drawStateM gsM drawWidget = do
     st <- liftIO (readMVar drawStateM)
@@ -329,3 +406,4 @@ changeDrawingState gsM drawStateM newState = do
      return newState)
    where
      resetSelection = modifyMVar_ gsM (\gs -> return $ gs { selection = NoSelection })
+     
