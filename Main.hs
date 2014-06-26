@@ -79,7 +79,6 @@ createAddDialog builder skelStore typeStore = do -- skelUniqueId = do
 updateCurrentTypes modelTypes modelSkel viewSkel = do
     selection <- treeViewGetSelection viewSkel
     selected <- treeSelectionGetSelected selection
-    let idCol = makeColumnIdBool 0
     Fold.forM_ selected $ \treeIter -> do
       let idx = listStoreIterToIndex treeIter
       skel <- listStoreGetValue modelSkel idx
@@ -116,6 +115,12 @@ updateSkelIndices modelTypes modelSkel = do
         else
             return ()
 
+deleteCurrentSkel skelStore skelView = do
+   selection <- treeViewGetSelection skelView
+   selected <- treeSelectionGetSelected selection
+   Fold.forM_ selected $ \treeIter -> do
+     listStoreRemove skelStore $ listStoreIterToIndex treeIter
+
 visCol :: ColumnId TypeEntry Bool
 visCol = makeColumnIdBool 0
 
@@ -147,8 +152,7 @@ main = do
     treeViewTypes <- builderGetObject builder castToTreeView "treeview2"
     treeViewSkels <- builderGetObject builder castToTreeView "treeview1"
     addSkelButton <- builderGetObject builder castToButton "buttonaddrule"
-    upSkelButton <- builderGetObject builder castToButton "buttonmoveup"
-    downSkelButton <- builderGetObject builder castToButton "buttonmovedown"
+    delSkelButton <- builderGetObject builder castToButton "buttondelrule"
 
     -- Connect signals to callbacks (main window)
     on window objectDestroy mainQuit
@@ -158,18 +162,18 @@ main = do
     on drawWidget buttonPressEvent (handleClick drawState graphState drawWidget)
     on drawWidget buttonReleaseEvent (handleRelease drawState graphState drawWidget)
     on treeViewSkels cursorChanged (updateCurrentTypes typeStore skelStore treeViewSkels)
-    -- on skelStore rowsReordered (rebuildFilters
-    -- rowInserted (TreePath -> TreeIter -> IO ())
-    -- rowDeleted (TreePath -> TreeIter -> IO ())
-
+    on skelStore rowsReordered (\ _ _ _ -> updateSkelIndices typeStore skelStore)
+    on skelStore rowInserted (\ _ _ -> updateSkelIndices typeStore skelStore)
+    on skelStore rowDeleted (\ _ -> updateSkelIndices typeStore skelStore)
+      
     -- Buttons
     selectButton `onToolButtonClicked` (changeState DSelect)
     nodeButton `onToolButtonClicked` (changeState DNode)
     edgeButton `onToolButtonClicked` (changeState DEdge)
     on addSkelButton buttonActivated (createAddDialog builder skelStore typeStore)
+    on delSkelButton buttonActivated (deleteCurrentSkel skelStore treeViewSkels)
 
     -- Load type database
- 
     colOccur <- Model.treeViewColumnNew
     Model.treeViewColumnSetTitle colOccur "Num"
     renderer <- Model.cellRendererTextNew

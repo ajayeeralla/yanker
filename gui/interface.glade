@@ -20,12 +20,14 @@
               <object class="GtkBox" id="box3">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
+                <property name="homogeneous">True</property>
                 <child>
                   <object class="GtkButton" id="buttonaddrule">
-                    <property name="label" translatable="yes">Add</property>
+                    <property name="label">gtk-add</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
+                    <property name="use_stock">True</property>
                     <property name="always_show_image">True</property>
                   </object>
                   <packing>
@@ -35,31 +37,18 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkButton" id="buttonmoveup">
-                    <property name="label" translatable="yes">Up</property>
+                  <object class="GtkButton" id="buttondelrule">
+                    <property name="label">gtk-delete</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
+                    <property name="use_stock">True</property>
                     <property name="always_show_image">True</property>
                   </object>
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
                     <property name="position">1</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkButton" id="buttonmovedown">
-                    <property name="label" translatable="yes">Down</property>
-                    <property name="visible">True</property>
-                    <property name="can_focus">True</property>
-                    <property name="receives_default">True</property>
-                    <property name="always_show_image">True</property>
-                  </object>
-                  <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
-                    <property name="position">2</property>
                   </packing>
                 </child>
               </object>
@@ -83,6 +72,7 @@
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="model">liststore1</property>
+                        <property name="reorderable">True</property>
                         <child internal-child="selection">
                           <object class="GtkTreeSelection" id="treeview-selection1"/>
                         </child>
