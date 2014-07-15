@@ -92,6 +92,27 @@ createAddDialog builder skelStore typeStore = do -- skelUniqueId = do
         listStoreAppend skelStore lambekSkel
         updateSkelIndices typeStore skelStore
 
+createFileDialog :: FileChooserAction -> Window -> (String -> IO ()) -> IO ()
+createFileDialog action parent callBack = do
+  let title = case action of
+        FileChooserActionOpen -> Just "Open a scheme"
+        FileChooserActionSave -> Just "Save the scheme"
+        _ -> Nothing
+  dialog <- fileChooserDialogNew
+            title
+            (Just parent)
+            action
+            [("Open",ResponseAccept),("Cancel",ResponseCancel)]
+  fileChooserSetSelectMultiple dialog False
+  widgetShow dialog
+  response <- dialogRun dialog
+  case response of
+    ResponseAccept -> do
+      Just fname <- fileChooserGetFilename dialog
+      callBack fname
+    _ -> return ()
+  widgetHide dialog
+
 createAboutDialog builder = do
     builderAddFromFile builder "gui/about-dialog.glade"
     aboutDialog <- builderGetObject builder castToDialog "aboutdialog"
@@ -185,6 +206,9 @@ main = do
     treeViewSkels <- builderGetObject builder castToTreeView "treeview1"
     addSkelButton <- builderGetObject builder castToButton "buttonaddrule"
     delSkelButton <- builderGetObject builder castToButton "buttondelrule"
+    openButton <- builderGetObject builder castToImageMenuItem "imagemenuitem-open"
+    saveButton <- builderGetObject builder castToImageMenuItem "imagemenuitem-save"
+    saveAsButton <- builderGetObject builder castToImageMenuItem "imagemenuitem-save-as"
     quitButton <- builderGetObject builder castToImageMenuItem "imagemenuitem-quit"
     aboutButton <- builderGetObject builder castToImageMenuItem "imagemenuitem-about"
 
@@ -209,6 +233,10 @@ main = do
     on delSkelButton buttonActivated (deleteCurrentSkel skelStore treeViewSkels)
 
     -- Menu items
+    on openButton menuItemActivated
+      (createFileDialog FileChooserActionOpen window (\_ -> return ()))
+    on saveButton menuItemActivated
+      (createFileDialog FileChooserActionSave window (\_ -> return ()))
     on quitButton menuItemActivated (exitApplication window)
     on aboutButton menuItemActivated (createAboutDialog builder)
 
