@@ -29,9 +29,8 @@ data TypeEntry = TypeEntry {
 
 defaultGraphState :: GraphState
 defaultGraphState =
-    let initGraph = (OGraph [(OGate "a" False), (OGate "b" True), (OGate "c" True)]
-                     [] (Set.empty)) in
-    createGraphState initGraph Map.empty
+    let initSkel = LSVar 1 in
+    createGraphState (emptyGraphFromSkel initSkel) Map.empty initSkel
 
 emptyGraphFromSkel :: LambekSkel -> OGraph
 emptyGraphFromSkel sk =
@@ -111,7 +110,7 @@ updateTypesAndEditor modelTypes modelSkel viewSkel gsM drawWidget = do
         
       -- Update the graphical editor
       gs <- readMVar gsM
-      let newGs = createGraphState (emptyGraphFromSkel skel) Map.empty
+      let newGs = createGraphState (emptyGraphFromSkel skel) Map.empty skel
       modifyMVar_ gsM (\_ -> return newGs)
       widgetQueueDraw drawWidget
 

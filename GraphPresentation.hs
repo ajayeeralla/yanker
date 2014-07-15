@@ -26,13 +26,15 @@ topOuterGates = 60.0
 bottomOuterGates = 400.0
 gateLineEnd = 460.0
 
+-- Where to draw the type
+typeSkeletonPosition = 30.0
 
 -- Get the position of a gate designated by a path
 -- given a graph and a graph presentation
 getGatePos :: OGraph -> GraphPresentation -> OPath -> (Double,Double)
 getGatePos (OGraph gates nodes _) presentation (OPath id name) =
     if id == boundaryId then
-       let Just (pos,producer) = findGateName name gates in
+       let Just (pos,producer) = findGateNameBoundary name gates in
        (outerGateOffset + outerGateSpacing*pos,
        if producer then topOuterGates else bottomOuterGates)
     else

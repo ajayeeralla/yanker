@@ -7,6 +7,7 @@ import Data.Foldable as Fold
 import qualified Data.Map.Strict as Map
 import OpenGraph as OG
 import GraphPresentation
+import TypeHierarchy
 
 -- GUI / Rendering stuff
 import Graphics.Rendering.Cairo
@@ -35,7 +36,8 @@ data GraphState = GraphState {
        selection :: ElemSelection,
        nodeBB :: (Map.Map OId BoundingBox),
        gateBB :: (Map.Map OPath BoundingBox),
-       lastMouse :: Maybe (Double,Double) }
+       lastMouse :: Maybe (Double,Double),
+       originalTypeSkeleton :: LambekSkel }
 
 seqInt 0 accu = accu
 seqInt n accu = seqInt (n-1) (n:accu)
@@ -166,6 +168,7 @@ drawScene drawStateM gsM = do
     gs <- liftIO (readMVar gsM)
     drawState <- liftIO (readMVar drawStateM)
     drawGraph (totalGraph gs) (presentation gs)
+    drawTypeSkeleton (originalTypeSkeleton gs)
     drawSelection (nodeBB gs) (selection gs)
     for_ (lastMouse gs) $ \(x,y) ->
       case drawState of
@@ -195,8 +198,8 @@ updateScene drawStateM gsM drawWidget = do
 
 
 -- Create a new graph state based on an input graph and a presentation
-createGraphState g@(OGraph gates nodes edges) pres = 
-    GraphState g pres NoSelection nodeBB gateBB Nothing
+createGraphState g@(OGraph gates nodes edges) pres skel = 
+    GraphState g pres NoSelection nodeBB gateBB Nothing skel
     where
       nodeBB = List.foldl (\ m n -> Map.insert (fst n) (boundingBoxFromNode pres n) m)
                          Map.empty
@@ -262,7 +265,12 @@ getOrCreateGate gs x y =
                            Nothing -> graph)
 
 updateBoundingBoxes gsM =
-   modifyMVar_  gsM (\gs -> return $ createGraphState (totalGraph gs) (presentation gs))
+   modifyMVar_  gsM (\gs -> return $ rebuildGraphState gs)
+
+rebuildGraphState gs =
+  createGraphState (totalGraph gs)
+                    (presentation gs)
+                    (originalTypeSkeleton gs)
 
 -- Handle a click based on the current state
 handleClick drawStateM gsM drawWidget = do
@@ -316,8 +324,7 @@ handleClick drawStateM gsM drawWidget = do
         widgetQueueDraw drawWidget
       DDelete -> do
         tryActions gsM (x,y) [deleteNearestGate, deleteNearestEdge, deleteNearestNode]
-        -- update bounding boxes
-        modifyMVar_ gsM (\ gs -> return $ createGraphState (totalGraph gs) (presentation gs))
+        updateBoundingBoxes gsM
         widgetQueueDraw drawWidget
       _ -> return ()
     liftIO $ updateBoundingBoxes gsM
@@ -397,7 +404,7 @@ handleRelease drawStateM gsM drawWidget = do
     liftIO $ case st of
       DMoving _ -> do
         modifyMVar_ gsM (\gs -> return $
-          ((createGraphState (totalGraph gs) (presentation gs)) { selection = (selection gs)}))
+          ((rebuildGraphState gs) { selection = (selection gs)}))
         gotoState DSelect
         widgetQueueDraw drawWidget
       _ -> return ()
@@ -412,4 +419,60 @@ changeDrawingState gsM drawStateM newState = do
      return newState)
    where
      resetSelection = modifyMVar_ gsM (\gs -> return $ gs { selection = NoSelection })
-     
+
+drawHorizontallyCenteredText x y text left right = do
+  (TextExtents xb _ w _ _ _) <- textExtents text
+  moveTo (x - (w/2.0)) (y)
+  textPath text
+  fillPreserve
+  setSourceRGB 0 0 0
+  setLineWidth 0.7
+  stroke
+  (TextExtents xbl _ wl _ _ _) <- textExtents left
+  moveTo (x - (w/2.0)-xbl-wl) y
+  textPath left
+  fillPreserve
+  stroke
+  (TextExtents xbr _ wr _ _ _) <- textExtents right
+  moveTo (x + (w/2.0)+xbr) y
+  textPath right
+  fillPreserve
+  stroke
+
+-- Draw a type skeleton with the types above the gates
+drawTypeSkeleton :: LambekSkel -> Render ()
+drawTypeSkeleton skel = do
+  _ <- drawSubSkeleton 1 NoParen "" "" skel
+  return ()
+  where
+    drawHorizText x text l r =
+      drawHorizontallyCenteredText x typeSkeletonPosition text l r
+      
+    drawSubSkeleton :: Double -> ParenthesisNeeded -> String -> String -> LambekSkel -> Render Double
+    drawSubSkeleton offset _ l r t@(LSAtom s _) = do
+      drawHorizText (offset*outerGateSpacing) (renderLS t) l r
+      return (offset + 1)
+    drawSubSkeleton offset _ l r t@(LSVar n) = do
+      drawHorizText (offset*outerGateSpacing) (show n) l r
+      return (offset + 1)
+
+    drawSubSkeleton offset NoParen l r (LSLeft body arg) = do
+      offset2 <- drawSubSkeleton offset AlwaysParen l "" arg
+      drawHorizText ((offset2-0.5)*outerGateSpacing) "\\" "" ""
+      drawSubSkeleton offset2 ParenRight "" r body
+    drawSubSkeleton offset ParenRight l r skel@(LSLeft _ _) =
+      drawSubSkeleton offset NoParen l r skel
+    drawSubSkeleton offset _ l r skel@(LSLeft _ _) = do
+      drawSubSkeleton offset NoParen (l++"(") (")"++r) skel
+
+    drawSubSkeleton offset NoParen l r (LSRight body arg) = do
+      offset2 <- drawSubSkeleton offset ParenLeft l "" body
+      drawHorizText ((offset2-0.5)*outerGateSpacing) "/" "" ""
+      drawSubSkeleton offset2 AlwaysParen "" r arg
+    drawSubSkeleton offset ParenLeft l r skel@(LSRight _ _) =
+      drawSubSkeleton offset NoParen l r skel
+    drawSubSkeleton offset _ l r skel@(LSRight _ _) = do
+      drawSubSkeleton offset NoParen (l++"(") (")"++r) skel
+
+    
+    
