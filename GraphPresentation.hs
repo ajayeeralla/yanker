@@ -24,6 +24,7 @@ outerGateOffset = 60.0
 outerGateSpacing = 60.0
 topOuterGates = 60.0
 bottomOuterGates = 400.0
+gateLineEnd = 460.0
 
 
 -- Get the position of a gate designated by a path

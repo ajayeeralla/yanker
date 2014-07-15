@@ -156,15 +156,13 @@ shiftGraph offset (OGraph bound nodes edges) =
 -- Get the position (and whether it is a producer or not) of a gate given its name
 -- and the list of gates of its node
 findGateName :: Num a => String -> [OGate] -> Maybe (a,Bool)
-findGateName = findGateName_accu (0,0)
+findGateName = findGateName_accu 0
   where
     findGateName_accu accu name [] = Nothing
-    findGateName_accu (accu1,accu2) name ((OGate s b):t) =
-      if s == name then Just (if b then accu1 else accu2, b)
-      else if b then
-        findGateName_accu (accu1+1,accu2) name t
+    findGateName_accu accu name ((OGate s b):t) =
+      if s == name then Just (accu, b)
       else
-        findGateName_accu (accu1,accu2+1) name t
+        findGateName_accu (accu+1) name t
 
 
 

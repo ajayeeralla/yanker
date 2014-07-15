@@ -33,6 +33,23 @@ defaultGraphState =
                      [] (Set.empty)) in
     createGraphState initGraph Map.empty
 
+emptyGraphFromSkel :: LambekSkel -> OGraph
+emptyGraphFromSkel sk =
+  OGraph (reverse gates) [] (Set.empty)
+  where
+    (gates,_) = dfs [] 1 False sk
+    dfs :: [OGate] -> Int -> Bool -> LambekSkel -> ([OGate],Int)
+    dfs accu count productive (LSAtom base _) =
+      ((OGate (base ++ (show count)) productive):accu, count+1)
+    dfs accu count productive (LSVar name) =
+      ((OGate ((show name) ++ "-" ++ (show count)) productive):accu, count+1)
+    dfs accu count productive (LSLeft body argument) =
+      let (accu2,count2) = dfs accu count (not productive) argument in
+      dfs accu2 count2 productive body
+    dfs accu count productive (LSRight body argument) =
+      let (accu2,count2) = dfs accu count productive body in
+      dfs accu2 count2 (not productive) argument
+
 loadTypeDatabase :: IO [TypeEntry]
 loadTypeDatabase = do
     typeFile <- readFile "data/short.types.db"
@@ -76,10 +93,14 @@ createAddDialog builder skelStore typeStore = do -- skelUniqueId = do
         listStoreAppend skelStore lambekSkel
         updateSkelIndices typeStore skelStore
 
-updateCurrentTypes modelTypes modelSkel viewSkel = do
+-- This function actually does 2 things:
+     -- Update the list of types matching the selected skeleton
+     -- Update the graphical editor with the corresponding graph
+updateTypesAndEditor modelTypes modelSkel viewSkel gsM drawWidget = do
     selection <- treeViewGetSelection viewSkel
     selected <- treeSelectionGetSelected selection
     Fold.forM_ selected $ \treeIter -> do
+      -- Update the current types
       let idx = listStoreIterToIndex treeIter
       skel <- listStoreGetValue modelSkel idx
       nbTypes <- listStoreGetSize modelTypes
@@ -87,6 +108,12 @@ updateCurrentTypes modelTypes modelSkel viewSkel = do
         entry <- listStoreGetValue modelTypes i
         let newVis = firstSkelIndex entry == idx
         listStoreSetValue modelTypes i $ entry { currentlyVisible = newVis }
+        
+      -- Update the graphical editor
+      gs <- readMVar gsM
+      let newGs = createGraphState (emptyGraphFromSkel skel) Map.empty
+      modifyMVar_ gsM (\_ -> return newGs)
+      widgetQueueDraw drawWidget
 
 forNTimes n =
    Control.Monad.State.forM_ (List.reverse . seq $ n)
@@ -132,7 +159,7 @@ main = do
     -- skelUniqueId <- newMVar 1 -- next unique id for skeletons
     
     let changeState = changeDrawingState graphState drawState
-        
+
     -- Create stores and lists
     skelStore <- listStoreNew []
     typeList <- loadTypeDatabase
@@ -162,7 +189,7 @@ main = do
     on drawWidget motionNotifyEvent (updateScene drawState graphState drawWidget)
     on drawWidget buttonPressEvent (handleClick drawState graphState drawWidget)
     on drawWidget buttonReleaseEvent (handleRelease drawState graphState drawWidget)
-    on treeViewSkels cursorChanged (updateCurrentTypes typeStore skelStore treeViewSkels)
+    on treeViewSkels cursorChanged (updateTypesAndEditor typeStore skelStore treeViewSkels graphState drawWidget)
     on skelStore rowsReordered (\ _ _ _ -> updateSkelIndices typeStore skelStore)
     on skelStore rowInserted (\ _ _ -> updateSkelIndices typeStore skelStore)
     on skelStore rowDeleted (\ _ -> updateSkelIndices typeStore skelStore)

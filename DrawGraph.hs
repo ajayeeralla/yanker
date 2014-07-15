@@ -35,7 +35,7 @@ data GraphState = GraphState {
        selection :: ElemSelection,
        nodeBB :: (Map.Map OId BoundingBox),
        gateBB :: (Map.Map OPath BoundingBox),
-       lastMouse :: (Double,Double) }
+       lastMouse :: Maybe (Double,Double) }
 
 seqInt 0 accu = accu
 seqInt n accu = seqInt (n-1) (n:accu)
@@ -126,8 +126,7 @@ drawEdge graph pres (OEdge from to) = do
 drawGraph g@(OGraph gates nodes edges) presentation = do
     setSourceRGB 1 1 1
     paint
-    drawGates topOuterGates (producers gates)
-    drawGates bottomOuterGates (consumers gates)
+    drawGates gates
     doList (\ (id,ONode s gates) ->
         let Just (posX,posY) = Map.lookup id presentation in
         drawNode posX posY (fromIntegral . length $ (consumers gates))
@@ -135,9 +134,16 @@ drawGraph g@(OGraph gates nodes edges) presentation = do
            nodes
     doSet (drawEdge g presentation) edges
     where
-     drawGates position =
-      doList (\ ((OGate s _),id) ->
-          drawGate (outerGateOffset + outerGateSpacing*id) position) .
+     drawGates =
+      doList (\ ((OGate s prod),id) ->
+          let y = if prod then topOuterGates else bottomOuterGates in
+          let x = outerGateOffset + outerGateSpacing*id in do
+          setSourceRGB 0.8 0.8 0.8
+          setLineWidth 1
+          moveTo x 0
+          lineTo x gateLineEnd
+          stroke
+          drawGate x y) .
       indexList
 
 -- Draw the current selection
@@ -158,24 +164,24 @@ drawSelection _ _ = return ()
 -- Draw the whole scene (graph and selection if any)
 drawScene drawStateM gsM = do
     gs <- liftIO (readMVar gsM)
-    let (x,y) = lastMouse gs
     drawState <- liftIO (readMVar drawStateM)
     drawGraph (totalGraph gs) (presentation gs)
     drawSelection (nodeBB gs) (selection gs)
-    case drawState of
-      DDrawing _ origX origY -> do
-         setSourceRGB 0 0 0
-         setLineWidth 1
-         moveTo origX origY
-         lineTo x y
-         stroke
-      DNode -> do
-         drawNode x y 0 0
-      _ -> return ()
+    for_ (lastMouse gs) $ \(x,y) ->
+      case drawState of
+        DDrawing _ origX origY -> do
+           setSourceRGB 0 0 0
+           setLineWidth 1
+           moveTo origX origY
+           lineTo x y
+           stroke
+        DNode -> do
+           drawNode x y 0 0
+        _ -> return ()
 
 updateScene drawStateM gsM drawWidget = do
     (x,y) <- eventCoordinates
-    liftIO $ modifyMVar_ gsM (\gs -> return $ gs { lastMouse = (x,y) })
+    liftIO $ modifyMVar_ gsM (\gs -> return $ gs { lastMouse = Just (x,y) })
     drawState <- liftIO $ readMVar drawStateM
     liftIO $ case drawState of
       DDrawing _ _ _ -> widgetQueueDraw drawWidget
@@ -190,7 +196,7 @@ updateScene drawStateM gsM drawWidget = do
 
 -- Create a new graph state based on an input graph and a presentation
 createGraphState g@(OGraph gates nodes edges) pres = 
-    GraphState g pres NoSelection nodeBB gateBB (0,0)
+    GraphState g pres NoSelection nodeBB gateBB Nothing
     where
       nodeBB = List.foldl (\ m n -> Map.insert (fst n) (boundingBoxFromNode pres n) m)
                          Map.empty
