@@ -1,13 +1,17 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module TypeHierarchy where
 
 import Data.List
 import Data.Functor
 import Data.Monoid
+import Data.Serialize
+import GHC.Generics as GGen
 
 import Text.ParserCombinators.ReadPrec
 import Text.ParserCombinators.Parsec.Token as P
 import Text.ParserCombinators.Parsec
-import Text.ParserCombinators.Parsec.Expr
+import Text.ParserCombinators.Parsec.Expr as PE
 import Text.ParserCombinators.Parsec.Language
 
 import qualified Data.Map.Strict as Map
@@ -15,7 +19,7 @@ import qualified Data.Map.Strict as Map
 
 -- Simple type in a pregroup: a base type and an exponent. +1 means right, -1 means left
 data PrgSType = PrgS String Int
-        deriving (Show, Eq)
+        deriving (Show, Eq, GGen.Generic)
 
 -- Left adjoint
 leftAdj (PrgS base exp) = PrgS base (exp-1)
@@ -30,6 +34,7 @@ renderST (PrgS base n) =
 
 -- (Complex) type in a pregroup: list of simple types
 data PrgType = Prg [PrgSType]
+        deriving (GGen.Generic)
 
 -- Left adjoint
 leftAdjC (Prg l) = (Prg (reverse (map leftAdj l)))
@@ -44,6 +49,7 @@ instance Monoid PrgType where
 
 -- Simple type in a group: a base type and its exponent (True for +1, False for -1)
 data GrpSType = GrpS String Bool
+        deriving (GGen.Generic)
 
 -- Inverse
 invGrpS (GrpS base exp) = GrpS base (not exp)
@@ -63,7 +69,7 @@ data LambekFun =
        LFAtom { baseLF :: String, annotLF :: Maybe String }
      | LFLeft LambekFun LambekFun
      | LFRight LambekFun LambekFun
-   deriving (Eq,Show,Ord)
+   deriving (Eq,Show,Ord,GGen.Generic)
 
 -- Pretty printing
 data ParenthesisNeeded = NoParen | AlwaysParen | ParenLeft | ParenRight
@@ -90,7 +96,7 @@ data LambekSkel =
     | LSVar Int
     | LSLeft LambekSkel LambekSkel
     | LSRight LambekSkel LambekSkel
-   deriving (Eq,Show,Ord)
+   deriving (Eq,Show,Ord,GGen.Generic)
 
 -- Pretty printing
 
@@ -166,6 +172,7 @@ dispatchTypes getType skels types =
 
 -- Lambek types, with products
 data LambekType = LTAtom String | LTLeft LambekType LambekType | LTRight LambekType LambekType | LTProd LambekType LambekType
+     deriving (GGen.Generic)
 
 -- instance Semigroup LambekType where
 --   (<>) = LTProd
@@ -191,8 +198,8 @@ atomLF atomFun = do
 
 termLFwhiteSpace = whiteSpaceL >> termLF
 
-tableLF = [ [Infix (whiteSpaceL >> char '/' >> return LFRight) AssocLeft ],
-            [Infix (whiteSpaceL >> char '\\' >> return (\a b -> LFLeft b a)) AssocRight ] ]
+tableLF = [ [PE.Infix (whiteSpaceL >> char '/' >> return LFRight) AssocLeft ],
+            [PE.Infix (whiteSpaceL >> char '\\' >> return (\a b -> LFLeft b a)) AssocRight ] ]
 
 parserLF = buildExpressionParser tableLF termLFwhiteSpace
 
@@ -214,8 +221,8 @@ termLS = natParser <|> (atomLF LSAtom) <|> (P.parens lexerL parserLS)
 
 termLSwhiteSpace = whiteSpaceL >> termLS
 
-tableLS = [ [Infix (whiteSpaceL >> char '/' >> return LSRight) AssocLeft ],
-            [Infix (whiteSpaceL >> char '\\' >> return (\a b -> LSLeft b a)) AssocRight ] ]
+tableLS = [ [PE.Infix (whiteSpaceL >> char '/' >> return LSRight) AssocLeft ],
+            [PE.Infix (whiteSpaceL >> char '\\' >> return (\a b -> LSLeft b a)) AssocRight ] ]
 
 parserLS = buildExpressionParser tableLS termLSwhiteSpace
 

@@ -1,7 +1,10 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module GraphPresentation where
 
 import qualified Data.Map.Strict as Map
 import Data.List
+import GHC.Generics as GGen
 import OpenGraph
 
 -- Defines the positions of the nodes of a graph onscreen
@@ -9,7 +12,7 @@ type GraphPresentation = Map.Map OId (Double,Double)
 
 -- Bounding box for nodes and gates
 data BoundingBox = BBox Double Double Double Double
-     deriving (Eq,Ord,Show)
+     deriving (Eq,Ord,Show,GGen.Generic)
 
 
 -- Drawing constants
