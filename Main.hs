@@ -19,7 +19,7 @@ import TypeDatabase
 import Data.List as List
 
 -- The type of an entry in the type list,
--- storing its number of ccurrences, visibility
+-- storing its number of occurrences, visibility
 -- and the index of the first skeleton matching it
 data TypeEntry = TypeEntry {
     nbOccurrences :: Int
@@ -91,6 +91,11 @@ createAddDialog builder skelStore typeStore = do -- skelUniqueId = do
       appendToStore lambekSkel = do
         listStoreAppend skelStore lambekSkel
         updateSkelIndices typeStore skelStore
+
+createAboutDialog builder = do
+    builderAddFromFile builder "gui/about-dialog.glade"
+    aboutDialog <- builderGetObject builder castToDialog "aboutdialog"
+    widgetShowAll aboutDialog
 
 -- This function actually does 2 things:
      -- Update the list of types matching the selected skeleton
@@ -180,6 +185,7 @@ main = do
     treeViewSkels <- builderGetObject builder castToTreeView "treeview1"
     addSkelButton <- builderGetObject builder castToButton "buttonaddrule"
     delSkelButton <- builderGetObject builder castToButton "buttondelrule"
+    aboutButton <- builderGetObject builder castToImageMenuItem "imagemenuitem-about"
 
     -- Connect signals to callbacks (main window)
     on window objectDestroy mainQuit
@@ -200,6 +206,7 @@ main = do
     delElemButton `onToolButtonClicked` (changeState DDelete)
     on addSkelButton buttonActivated (createAddDialog builder skelStore typeStore)
     on delSkelButton buttonActivated (deleteCurrentSkel skelStore treeViewSkels)
+    on aboutButton menuItemActivated (createAboutDialog builder)
 
     -- Load type database
     colOccur <- Model.treeViewColumnNew
