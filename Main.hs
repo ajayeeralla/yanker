@@ -185,6 +185,7 @@ main = do
     treeViewSkels <- builderGetObject builder castToTreeView "treeview1"
     addSkelButton <- builderGetObject builder castToButton "buttonaddrule"
     delSkelButton <- builderGetObject builder castToButton "buttondelrule"
+    quitButton <- builderGetObject builder castToImageMenuItem "imagemenuitem-quit"
     aboutButton <- builderGetObject builder castToImageMenuItem "imagemenuitem-about"
 
     -- Connect signals to callbacks (main window)
@@ -206,6 +207,9 @@ main = do
     delElemButton `onToolButtonClicked` (changeState DDelete)
     on addSkelButton buttonActivated (createAddDialog builder skelStore typeStore)
     on delSkelButton buttonActivated (deleteCurrentSkel skelStore treeViewSkels)
+
+    -- Menu items
+    on quitButton menuItemActivated (exitApplication window)
     on aboutButton menuItemActivated (createAboutDialog builder)
 
     -- Load type database
@@ -243,3 +247,8 @@ main = do
     
     widgetShowAll window
     mainGUI
+
+    where
+      exitApplication window = do
+        widgetHide window
+        mainQuit
