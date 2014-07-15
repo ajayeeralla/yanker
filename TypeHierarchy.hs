@@ -73,7 +73,7 @@ renderLFparen (LFAtom s Nothing) _ = s
 renderLFparen (LFAtom s (Just annot)) _ = s ++ "[" ++ annot ++ "]"
 
 renderLFparen (LFLeft b a) NoParen =
-  (renderLFparen b AlwaysParen) ++ "\\" ++ (renderLFparen a ParenRight)
+  (renderLFparen a AlwaysParen) ++ "\\" ++ (renderLFparen b ParenRight)
 renderLFparen t@(LFLeft _ _) ParenRight = renderLFparen t NoParen
 renderLFparen t@(LFLeft _ _) _ = addParen $ renderLFparen t NoParen
 
@@ -93,11 +93,23 @@ data LambekSkel =
    deriving (Eq,Show,Ord)
 
 -- Pretty printing
-renderLS (LSAtom s Nothing) = s
-renderLS (LSAtom s (Just annot)) = s ++ "[" ++ annot ++ "]"
-renderLS (LSVar s) = (show s)
-renderLS (LSLeft a b) = (renderLS b) ++ "\\" ++ (renderLS a)
-renderLS (LSRight a b) = (renderLS a) ++ "/" ++ (renderLS b)
+
+renderLSparen (LSAtom s Nothing) _ = s
+renderLSparen (LSAtom s (Just annot)) _ = s ++ "[" ++ annot ++ "]"
+
+renderLSparen (LSVar n) _ = show n
+
+renderLSparen (LSLeft b a) NoParen =
+  (renderLSparen a AlwaysParen) ++ "\\" ++ (renderLSparen b ParenRight)
+renderLSparen t@(LSLeft _ _) ParenRight = renderLSparen t NoParen
+renderLSparen t@(LSLeft _ _) _ = addParen $ renderLSparen t NoParen
+
+renderLSparen (LSRight a b) NoParen =
+  (renderLSparen a ParenLeft) ++ "/" ++ (renderLSparen b AlwaysParen)
+renderLSparen t@(LSRight _ _) ParenLeft = renderLSparen t NoParen
+renderLSparen t@(LSRight _ _) _ = addParen $ renderLSparen t NoParen
+
+renderLS x = renderLSparen x NoParen
 
 -- Utility: unify two assignments
 unionMap m1 m2 =
@@ -180,7 +192,7 @@ atomLF atomFun = do
 termLFwhiteSpace = whiteSpaceL >> termLF
 
 tableLF = [ [Infix (whiteSpaceL >> char '/' >> return LFRight) AssocLeft ],
-            [Infix (whiteSpaceL >> char '\\' >> return LFLeft) AssocRight ] ]
+            [Infix (whiteSpaceL >> char '\\' >> return (\a b -> LFLeft b a)) AssocRight ] ]
 
 parserLF = buildExpressionParser tableLF termLFwhiteSpace
 
@@ -203,7 +215,7 @@ termLS = natParser <|> (atomLF LSAtom) <|> (P.parens lexerL parserLS)
 termLSwhiteSpace = whiteSpaceL >> termLS
 
 tableLS = [ [Infix (whiteSpaceL >> char '/' >> return LSRight) AssocLeft ],
-            [Infix (whiteSpaceL >> char '\\' >> return LSLeft) AssocRight ] ]
+            [Infix (whiteSpaceL >> char '\\' >> return (\a b -> LSLeft b a)) AssocRight ] ]
 
 parserLS = buildExpressionParser tableLS termLSwhiteSpace
 
