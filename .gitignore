@@ -6,3 +6,5 @@
 *.swp
 # Databases
 types.tsv
+# Cabal build files
+dist
