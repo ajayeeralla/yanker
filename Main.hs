@@ -75,7 +75,7 @@ createAddDialog builder skelStore typeStore = do -- skelUniqueId = do
             putStrLn (show lambekSkel)
             widgetHide dialog
       appendToStore lambekSkel = do
-        listStoreAppend skelStore lambekSkel
+        listStorePrepend skelStore lambekSkel
         updateSkelIndices typeStore skelStore
 
 createFileDialog :: FileChooserAction -> Window -> (String -> IO ()) -> IO ()
