@@ -151,11 +151,7 @@ updateTypesAndEditor modelTypes modelSkel viewSkel (readGS,setGS) drawWidget = d
       widgetQueueDraw drawWidget
 
 forNTimes n =
-   Control.Monad.State.forM_ (List.reverse . seq $ n)
-   where
-     seq :: Int -> [Int]
-     seq 0 = []
-     seq n = (n-1):(seq $ n-1)
+   Fold.for_ [0..(n-1)]
 
 updateSkelIndices :: ListStore TypeEntry -> ListStore SkelEntry -> IO ()
 updateSkelIndices modelTypes modelSkel = do
@@ -203,8 +199,6 @@ main = do
     -- State of the interface
     graphState <- newMVar defaultGraphState
     drawState <- newMVar DSelect
-
-    -- skelUniqueId <- newMVar 1 -- next unique id for skeletons
     
     let changeState = changeDrawingState graphState drawState
 
@@ -221,19 +215,20 @@ main = do
     -- Get interesting widgets (main window)
     window <- builderGetObject builder castToWindow "window1"
     drawWidget <- builderGetObject builder castToDrawingArea "drawingarea1"
-    selectButton <- builderGetObject builder castToToolButton "selectbutton"
-    nodeButton <- builderGetObject builder castToToolButton "nodebutton"
-    edgeButton <- builderGetObject builder castToToolButton "edgebutton"
-    delElemButton <- builderGetObject builder castToToolButton "deleteelement"
+    
+    [selectButton, nodeButton, edgeButton, delElemButton] <-
+      sequence . (List.map (builderGetObject builder castToToolButton)) $
+      ["selectbutton", "nodebutton", "edgebutton", "deleteelement"]
+      
     treeViewTypes <- builderGetObject builder castToTreeView "treeview2"
     treeViewSkels <- builderGetObject builder castToTreeView "treeview1"
     addSkelButton <- builderGetObject builder castToButton "buttonaddrule"
     delSkelButton <- builderGetObject builder castToButton "buttondelrule"
-    openButton <- builderGetObject builder castToImageMenuItem "imagemenuitem-open"
-    saveButton <- builderGetObject builder castToImageMenuItem "imagemenuitem-save"
-    saveAsButton <- builderGetObject builder castToImageMenuItem "imagemenuitem-save-as"
-    quitButton <- builderGetObject builder castToImageMenuItem "imagemenuitem-quit"
-    aboutButton <- builderGetObject builder castToImageMenuItem "imagemenuitem-about"
+    
+    [openButton, saveButton, saveAsButton, quitButton, aboutButton] <-
+      sequence (List.map
+                (\x -> builderGetObject builder castToImageMenuItem ("imagemenuitem-"++x))
+      ["open","save","save-as","quit","about"])
 
     -- Graph state manipulation helpers
     let readGS = readMVar graphState
