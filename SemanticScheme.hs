@@ -4,6 +4,7 @@ module SemanticScheme where
 import GHC.Generics
 import Data.Binary
 import Data.Set as Set
+import qualified Control.Exception as E
 import System.IO.Error
 
 import TypeHierarchy
@@ -32,14 +33,19 @@ loadSemanticScheme :: String -> IO (Either String SemanticScheme)
 loadSemanticScheme fileName =
   catchIOError
       (do
-          s <- decodeFile $ fileName
-          return $ Right s)
+          s <- decodeFileOrFail $ fileName
+          return $ case s of
+            Right x -> Right x
+            Left (_,error) -> Left ("Invalid file: "++error))
       (\error -> return $ Left (show error))
 
 -- Save a semantic scheme to a file
-saveSemanticScheme :: FilePath -> SemanticScheme -> IO ()
+saveSemanticScheme :: FilePath -> SemanticScheme -> IO (Maybe String)
 saveSemanticScheme fileName semScheme =
-  encodeFile fileName semScheme
+  catchIOError (do
+     encodeFile fileName semScheme
+     return Nothing)
+    (\error -> return $ Just (show error)) 
 
 -- Create an empty graph corresponding to a Lambek Skeleton
 emptyGraphFromSkel :: LambekSkel -> OGraph

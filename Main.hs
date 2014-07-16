@@ -80,15 +80,15 @@ createAddDialog builder skelStore typeStore = do -- skelUniqueId = do
 
 createFileDialog :: FileChooserAction -> Window -> (String -> IO ()) -> IO ()
 createFileDialog action parent callBack = do
-  let title = case action of
-        FileChooserActionOpen -> Just "Open a scheme"
-        FileChooserActionSave -> Just "Save the scheme"
-        _ -> Nothing
+  let (title,name) = case action of
+        FileChooserActionOpen -> (Just "Open a scheme","Open")
+        FileChooserActionSave -> (Just "Save the scheme","Save")
+        _ -> (Nothing,"Accept")
   dialog <- fileChooserDialogNew
             title
             (Just parent)
             action
-            [("Open",ResponseAccept),("Cancel",ResponseCancel)]
+            [(name,ResponseAccept),("Cancel",ResponseCancel)]
   fileChooserSetSelectMultiple dialog False
   widgetShow dialog
   response <- dialogRun dialog
@@ -98,6 +98,31 @@ createFileDialog action parent callBack = do
       callBack fname
     _ -> return ()
   widgetHide dialog
+
+reportError :: Window -> String -> IO ()
+reportError mainWindow msg = do
+  dialog <- messageDialogNew (Just mainWindow) [] MessageError ButtonsOk msg
+  dialogRun dialog
+  widgetHide dialog
+  return ()
+
+tryLoadSemScheme :: Window -> ListStore SkelEntry -> String -> IO ()
+tryLoadSemScheme mainWindow skelStore fname = do
+  newScheme <- loadSemanticScheme fname
+  case newScheme of
+    Right scheme -> do
+      listStoreClear skelStore
+      Fold.for_ scheme (listStoreAppend skelStore)
+    Left error -> reportError mainWindow error
+
+trySaveSemScheme :: Window -> ListStore SkelEntry -> String -> IO ()
+trySaveSemScheme mainWindow skelStore fname = do
+  currentScheme <- listStoreToList skelStore
+  error <- saveSemanticScheme fname currentScheme
+  case error of
+    Just error -> reportError mainWindow error
+    Nothing -> return ()
+      
 
 createAboutDialog builder = do
     builderAddFromFile builder "gui/about-dialog.glade"
@@ -237,9 +262,9 @@ main = do
 
     -- Menu items
     on openButton menuItemActivated
-      (createFileDialog FileChooserActionOpen window (\_ -> return ()))
+      (createFileDialog FileChooserActionOpen window (tryLoadSemScheme window skelStore))
     on saveButton menuItemActivated
-      (createFileDialog FileChooserActionSave window (\_ -> return ()))
+      (createFileDialog FileChooserActionSave window (trySaveSemScheme window skelStore))
     on quitButton menuItemActivated (exitApplication window)
     on aboutButton menuItemActivated (createAboutDialog builder)
 

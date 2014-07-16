@@ -5,6 +5,7 @@ module TypeHierarchy where
 import Data.List
 import Data.Functor
 import Data.Monoid
+import Data.Binary
 import Data.Serialize
 import GHC.Generics as GGen
 
@@ -20,6 +21,7 @@ import qualified Data.Map.Strict as Map
 -- Simple type in a pregroup: a base type and an exponent. +1 means right, -1 means left
 data PrgSType = PrgS String Int
         deriving (Show, Eq, GGen.Generic)
+instance Binary PrgSType
 
 -- Left adjoint
 leftAdj (PrgS base exp) = PrgS base (exp-1)
@@ -35,6 +37,7 @@ renderST (PrgS base n) =
 -- (Complex) type in a pregroup: list of simple types
 data PrgType = Prg [PrgSType]
         deriving (GGen.Generic)
+instance Binary PrgType
 
 -- Left adjoint
 leftAdjC (Prg l) = (Prg (reverse (map leftAdj l)))
@@ -50,6 +53,7 @@ instance Monoid PrgType where
 -- Simple type in a group: a base type and its exponent (True for +1, False for -1)
 data GrpSType = GrpS String Bool
         deriving (GGen.Generic)
+instance Binary GrpSType
 
 -- Inverse
 invGrpS (GrpS base exp) = GrpS base (not exp)
@@ -59,6 +63,9 @@ renderGS (GrpS base False) = base ++ "(-1)"
 
 -- (Complex) type in a group: product of simple types
 data GrpType = Grp [GrpSType]
+   deriving (GGen.Generic)
+instance Binary GrpType
+
 -- Inverse
 invGrp = reverse . (map invGrpS)
 -- Pretty printing
@@ -70,6 +77,7 @@ data LambekFun =
      | LFLeft LambekFun LambekFun
      | LFRight LambekFun LambekFun
    deriving (Eq,Show,Ord,GGen.Generic)
+instance Binary LambekFun
 
 -- Pretty printing
 data ParenthesisNeeded = NoParen | AlwaysParen | ParenLeft | ParenRight
@@ -97,6 +105,7 @@ data LambekSkel =
     | LSLeft LambekSkel LambekSkel
     | LSRight LambekSkel LambekSkel
    deriving (Eq,Show,Ord,GGen.Generic)
+instance Binary LambekSkel
 
 -- Pretty printing
 
@@ -173,6 +182,7 @@ dispatchTypes getType skels types =
 -- Lambek types, with products
 data LambekType = LTAtom String | LTLeft LambekType LambekType | LTRight LambekType LambekType | LTProd LambekType LambekType
      deriving (GGen.Generic)
+instance Binary LambekType
 
 -- instance Semigroup LambekType where
 --   (<>) = LTProd

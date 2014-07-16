@@ -4,6 +4,7 @@ module OpenGraph where
 
 import Data.List
 import Data.Maybe
+import Data.Binary
 import Control.Exception
 import qualified Data.Set as Set
 import GHC.Generics as GGen
@@ -16,6 +17,8 @@ boundaryId = 0
 -- Gate in a node of a graph: produces or consumes an entity. True when it produces
 data OGate = OGate String Bool
    deriving (Eq, Show, GGen.Generic)
+instance Binary OGate
+
 -- Negates a gate
 neg (OGate s b) = OGate s (not b)
 -- Selects only producer (resp. consumer) gates in a list
@@ -25,16 +28,20 @@ consumers = filter (\ (OGate _ b) -> not b)
 -- Node in a graph: a name (not used internally) and a bunch of gates
 data ONode = ONode String [OGate]
    deriving (Eq,Show, GGen.Generic)
+instance Binary ONode
+
 -- Turns a node upside down: negates its gates
 flip (ONode name gates) = ONode name (map neg gates)
 
 -- Path in a graph: the identifier of a node plus the name of the corresponding gate
 data OPath = OPath OId String
    deriving (Eq,Ord,Show,GGen.Generic)
+instance Binary OPath
 
 -- Edge in a graph: path to a producer and path to a consumer
 data OEdge = OEdge OPath OPath
    deriving (Eq,Ord,Show,GGen.Generic)
+instance Binary OEdge
 
 -- Open graph: a list of gates as boundaries, a list of nodes, and a list of edges
 data OGraph = OGraph {
@@ -42,6 +49,7 @@ data OGraph = OGraph {
      nodesList :: [(OId,ONode)],
      edgesList :: (Set.Set OEdge)}
    deriving (Eq,Show,GGen.Generic)
+instance Binary OGraph
 -- All the nodes, including a fake node for the boundary
 nodesAndBoundary (OGraph boundary nodes _) =
    (boundaryId,(ONode "" boundary)):nodes
