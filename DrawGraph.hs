@@ -8,6 +8,7 @@ import qualified Data.Map.Strict as Map
 import OpenGraph as OG
 import GraphPresentation
 import TypeHierarchy
+import SemanticScheme
 
 -- GUI / Rendering stuff
 import Graphics.Rendering.Cairo
@@ -182,16 +183,16 @@ drawScene drawStateM gsM = do
            drawNode x y 0 0
         _ -> return ()
 
-updateScene drawStateM gsM drawWidget = do
+updateScene drawStateM (readGS,setGS) drawWidget = do
     (x,y) <- eventCoordinates
-    liftIO $ modifyMVar_ gsM (\gs -> return $ gs { lastMouse = Just (x,y) })
+    gs <- liftIO $ readGS
+    liftIO $ setGS $ gs { lastMouse = Just (x,y) }
     drawState <- liftIO $ readMVar drawStateM
     liftIO $ case drawState of
       DDrawing _ _ _ -> widgetQueueDraw drawWidget
       DNode -> widgetQueueDraw drawWidget
       DMoving id -> do 
-       modifyMVar_ gsM (\gs -> return $ gs {
-          presentation = Map.insert id (x,y) $ presentation gs })
+       setGS $ gs { presentation = Map.insert id (x,y) $ presentation gs }
        widgetQueueDraw drawWidget
       _ -> return ()
     return True
@@ -211,6 +212,10 @@ createGraphState g@(OGraph gates nodes edges) pres skel =
       gateBB = List.foldl (\ m (id,ONode _ gates) -> addGates m id gates) outerGatesBB nodes
       outerGatesBB = addGates Map.empty boundaryId gates
 
+-- Same function, different type
+createGraphStateFromEntry :: SkelEntry -> GraphState
+createGraphStateFromEntry entry =
+  createGraphState (skelGraph entry) (skelPres entry) (skeleton entry)
 
 -- Make an edge out of two gates, if there is one
 -- (one has to be producer, the other consumer)
@@ -264,8 +269,9 @@ getOrCreateGate gs x y =
                            Just g -> g
                            Nothing -> graph)
 
-updateBoundingBoxes gsM =
-   modifyMVar_  gsM (\gs -> return $ rebuildGraphState gs)
+updateBoundingBoxes (readGS,setGS) = do
+  gs <- readGS
+  setGS . rebuildGraphState $ gs
 
 rebuildGraphState gs =
   createGraphState (totalGraph gs)
@@ -273,13 +279,12 @@ rebuildGraphState gs =
                     (originalTypeSkeleton gs)
 
 -- Handle a click based on the current state
-handleClick drawStateM gsM drawWidget = do
+handleClick drawStateM (readGS,setGS) drawWidget = do
     coords <- eventCoordinates
     let (x,y) = coords
     st <- liftIO (readMVar drawStateM)
-    gs <- liftIO (readMVar gsM)
+    gs <- liftIO readGS
     let gotoState newState = modifyMVar_ drawStateM (\_ -> return newState)
-    let setGS newGS = modifyMVar_ gsM (\_ -> return newGS)
 
     liftIO $ case st of
       DNode -> do
@@ -323,35 +328,36 @@ handleClick drawStateM gsM drawWidget = do
              gotoState DEdge
         widgetQueueDraw drawWidget
       DDelete -> do
-        tryActions gsM (x,y) [deleteNearestGate, deleteNearestEdge, deleteNearestNode]
-        updateBoundingBoxes gsM
+        tryActions (x,y) [deleteNearestGate, deleteNearestEdge, deleteNearestNode]
+        updateBoundingBoxes (readGS,setGS)
         widgetQueueDraw drawWidget
       _ -> return ()
-    liftIO $ updateBoundingBoxes gsM
+    liftIO $ updateBoundingBoxes (readGS,setGS)
     return True
     where
-      tryActions :: a -> b -> [a -> b -> IO Bool] -> IO ()
-      tryActions gsM pos [] = return ()
-      tryActions gsM pos (filter:others) = do
-        successful <- filter gsM pos
+      tryActions :: a -> [a -> IO Bool] -> IO ()
+      tryActions pos [] = return ()
+      tryActions pos (filter:others) = do
+        successful <- filter pos
         if successful then
           return ()
         else
-          tryActions gsM pos others
-      deleteNearestGate gsM (x,y) = do
-        gs <- liftIO (readMVar gsM)
+          tryActions pos others
+      deleteNearestGate (x,y) = do
+        gs <- readGS
         let searchResult = findBoundingBox x y (gateBB gs)
         case searchResult of
           Nothing -> return False
           Just gate -> do
-            modifyMVar_ gsM (\ gs -> return $ gs { totalGraph = deleteGate (totalGraph gs) gate } )
+            gs <- readGS
+            setGS $ gs { totalGraph = deleteGate (totalGraph gs) gate }
             return True
 
-      deleteNearestEdge gsM (x,y) = do
+      deleteNearestEdge (x,y) = do
         return False -- not implemented yet
 
-      deleteNearestNode gsM (x,y) = do
-        gs <- liftIO (readMVar gsM)
+      deleteNearestNode (x,y) = do
+        gs <- liftIO readGS
         let searchResult = findBoundingBox x y (nodeBB gs)
         case searchResult of
           Nothing -> return False
@@ -362,7 +368,8 @@ handleClick drawStateM gsM drawWidget = do
              -- Delete the node itself
              let newNodeList = List.filter (\ (id,_) -> id /= node) (nodesList newGraph)
              -- TODO: update bounding boxes
-             modifyMVar_ gsM (\ gs -> return $ gs { totalGraph = newGraph { nodesList = newNodeList }})
+             gs <- readGS
+             setGS $ gs { totalGraph = newGraph { nodesList = newNodeList }}
              return True
         where
           getGatesList :: OGraph -> OId -> [OPath]
@@ -397,14 +404,14 @@ handleClick drawStateM gsM drawWidget = do
           replaceItem k v (h:t) = h:(replaceItem k v t)
           
 
-handleRelease drawStateM gsM drawWidget = do
+handleRelease drawStateM (readGS,setGS) drawWidget = do
     st <- liftIO (readMVar drawStateM)
     let gotoState newState = modifyMVar_ drawStateM (\_ -> return newState)
     (x,y) <- eventCoordinates
     liftIO $ case st of
       DMoving _ -> do
-        modifyMVar_ gsM (\gs -> return $
-          ((rebuildGraphState gs) { selection = (selection gs)}))
+        gs <- readGS
+        setGS ((rebuildGraphState gs) { selection = (selection gs)})
         gotoState DSelect
         widgetQueueDraw drawWidget
       _ -> return ()

@@ -10,6 +10,9 @@ import OpenGraph
 -- Defines the positions of the nodes of a graph onscreen
 type GraphPresentation = Map.Map OId (Double,Double)
 
+-- Empty graph presentation
+emptyGraphPresentation = Map.empty
+
 -- Bounding box for nodes and gates
 data BoundingBox = BBox Double Double Double Double
      deriving (Eq,Ord,Show,GGen.Generic)

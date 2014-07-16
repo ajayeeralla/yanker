@@ -16,6 +16,7 @@ import DrawGraph
 import OpenGraph
 import TypeHierarchy
 import TypeDatabase
+import SemanticScheme
 import Data.List as List
 
 -- The type of an entry in the type list,
@@ -27,27 +28,12 @@ data TypeEntry = TypeEntry {
   , currentlyVisible :: Bool
   , firstSkelIndex :: Int }
 
+
 defaultGraphState :: GraphState
 defaultGraphState =
     let initSkel = LSVar 1 in
     createGraphState (emptyGraphFromSkel initSkel) Map.empty initSkel
 
-emptyGraphFromSkel :: LambekSkel -> OGraph
-emptyGraphFromSkel sk =
-  OGraph (reverse gates) [] (Set.empty)
-  where
-    (gates,_) = dfs [] 1 False sk
-    dfs :: [OGate] -> Int -> Bool -> LambekSkel -> ([OGate],Int)
-    dfs accu count productive (LSAtom base _) =
-      ((OGate (base ++ (show count)) productive):accu, count+1)
-    dfs accu count productive (LSVar name) =
-      ((OGate ((show name) ++ "-" ++ (show count)) productive):accu, count+1)
-    dfs accu count productive (LSLeft body argument) =
-      let (accu2,count2) = dfs accu count (not productive) argument in
-      dfs accu2 count2 productive body
-    dfs accu count productive (LSRight body argument) =
-      let (accu2,count2) = dfs accu count productive body in
-      dfs accu2 count2 (not productive) argument
 
 loadTypeDatabase :: IO [TypeEntry]
 loadTypeDatabase = do
@@ -85,7 +71,7 @@ createAddDialog builder skelStore typeStore = do -- skelUniqueId = do
         case parseResult of
           Left error -> print error
           Right lambekSkel -> do
-            appendToStore lambekSkel
+            appendToStore (defaultSkelEntry lambekSkel)
             putStrLn (show lambekSkel)
             widgetHide dialog
       appendToStore lambekSkel = do
@@ -121,13 +107,13 @@ createAboutDialog builder = do
 -- This function actually does 2 things:
      -- Update the list of types matching the selected skeleton
      -- Update the graphical editor with the corresponding graph
-updateTypesAndEditor modelTypes modelSkel viewSkel gsM drawWidget = do
+updateTypesAndEditor modelTypes modelSkel viewSkel (readGS,setGS) drawWidget = do
     selection <- treeViewGetSelection viewSkel
     selected <- treeSelectionGetSelected selection
     Fold.forM_ selected $ \treeIter -> do
       -- Update the current types
       let idx = listStoreIterToIndex treeIter
-      skel <- listStoreGetValue modelSkel idx
+      skelEntry <- listStoreGetValue modelSkel idx
       nbTypes <- listStoreGetSize modelTypes
       forNTimes nbTypes $ \i -> do
         entry <- listStoreGetValue modelTypes i
@@ -135,9 +121,8 @@ updateTypesAndEditor modelTypes modelSkel viewSkel gsM drawWidget = do
         listStoreSetValue modelTypes i $ entry { currentlyVisible = newVis }
         
       -- Update the graphical editor
-      gs <- readMVar gsM
-      let newGs = createGraphState (emptyGraphFromSkel skel) Map.empty skel
-      modifyMVar_ gsM (\_ -> return newGs)
+      let newGs = createGraphStateFromEntry skelEntry
+      setGS newGs
       widgetQueueDraw drawWidget
 
 forNTimes n =
@@ -147,6 +132,7 @@ forNTimes n =
      seq 0 = []
      seq n = (n-1):(seq $ n-1)
 
+updateSkelIndices :: ListStore TypeEntry -> ListStore SkelEntry -> IO ()
 updateSkelIndices modelTypes modelSkel = do
     nbSkels <- listStoreGetSize modelSkel
     nbTypes <- listStoreGetSize modelTypes
@@ -158,7 +144,8 @@ updateSkelIndices modelTypes modelSkel = do
     
     -- for each skeleton
     forNTimes nbSkels $ \j -> do
-      skel <- listStoreGetValue modelSkel j
+      skelEntry <- listStoreGetValue modelSkel j
+      let skel = skeleton skelEntry
       -- for each type
       forNTimes nbTypes $ \i -> do
         entry <- listStoreGetValue modelTypes i
@@ -176,17 +163,28 @@ deleteCurrentSkel skelStore skelView = do
 visCol :: ColumnId TypeEntry Bool
 visCol = makeColumnIdBool 0
 
+-- Update the graph state and update the corresponding entry in the skeleton list
+setGraphState gsM skelStore skelView newGs = do
+  modifyMVar_ gsM (\_ -> return newGs)
+  selection <- treeViewGetSelection skelView
+  selected <- treeSelectionGetSelected selection
+  Fold.forM_ selected $ \treeIter -> do
+    let idx = listStoreIterToIndex treeIter
+    listStoreSetValue skelStore idx
+      (SkelEntry (originalTypeSkeleton newGs) (totalGraph newGs) (presentation newGs))
+
 main :: IO ()
 main = do
     -- State of the interface
     graphState <- newMVar defaultGraphState
     drawState <- newMVar DSelect
+
     -- skelUniqueId <- newMVar 1 -- next unique id for skeletons
     
     let changeState = changeDrawingState graphState drawState
 
     -- Create stores and lists
-    skelStore <- listStoreNew []
+    skelStore <- listStoreNew defaultSemanticScheme
     typeList <- loadTypeDatabase
     typeStore <- listStoreNew typeList
 
@@ -212,14 +210,19 @@ main = do
     quitButton <- builderGetObject builder castToImageMenuItem "imagemenuitem-quit"
     aboutButton <- builderGetObject builder castToImageMenuItem "imagemenuitem-about"
 
+    -- Graph state manipulation helpers
+    let readGS = readMVar graphState
+    let setGS = setGraphState graphState skelStore treeViewSkels
+    let gs = (readGS,setGS)
+
     -- Connect signals to callbacks (main window)
     on window objectDestroy mainQuit
     widgetAddEvents drawWidget [PointerMotionMask, ButtonPressMask]
     on drawWidget draw (drawScene drawState graphState)
-    on drawWidget motionNotifyEvent (updateScene drawState graphState drawWidget)
-    on drawWidget buttonPressEvent (handleClick drawState graphState drawWidget)
-    on drawWidget buttonReleaseEvent (handleRelease drawState graphState drawWidget)
-    on treeViewSkels cursorChanged (updateTypesAndEditor typeStore skelStore treeViewSkels graphState drawWidget)
+    on drawWidget motionNotifyEvent (updateScene drawState gs drawWidget)
+    on drawWidget buttonPressEvent (handleClick drawState gs drawWidget)
+    on drawWidget buttonReleaseEvent (handleRelease drawState gs drawWidget)
+    on treeViewSkels cursorChanged (updateTypesAndEditor typeStore skelStore treeViewSkels gs drawWidget)
     on skelStore rowsReordered (\ _ _ _ -> updateSkelIndices typeStore skelStore)
     on skelStore rowInserted (\ _ _ -> updateSkelIndices typeStore skelStore)
     on skelStore rowDeleted (\ _ -> updateSkelIndices typeStore skelStore)
@@ -270,7 +273,7 @@ main = do
     Model.treeViewColumnSetTitle colSkel "Pattern"
     Model.cellLayoutPackStart colSkel renderer False
     Model.cellLayoutSetAttributes colSkel renderer skelStore
-           $ (\tp -> [Model.cellText := renderLS tp])
+           $ (\tp -> [Model.cellText := renderLS . skeleton $ tp])
     Model.treeViewAppendColumn treeViewSkels colSkel
     
     widgetShowAll window
