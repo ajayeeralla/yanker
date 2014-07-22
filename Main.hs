@@ -200,8 +200,6 @@ main = do
     graphState <- newMVar defaultGraphState
     drawState <- newMVar DSelect
     
-    let changeState = changeDrawingState graphState drawState
-
     -- Create stores and lists
     skelStore <- listStoreNew defaultSemanticScheme
     typeList <- loadTypeDatabase
@@ -211,6 +209,11 @@ main = do
     initGUI
     builder <- builderNew
     builderAddFromFile builder "gui/interface.glade"
+
+    -- Cursors for the drawing area
+    crossCursor <- cursorNew Crosshair
+    pencilCursor <- cursorNew Pencil
+    let cursors = [crossCursor,pencilCursor]
 
     -- Get interesting widgets (main window)
     window <- builderGetObject builder castToWindow "window1"
@@ -235,6 +238,9 @@ main = do
     let setGS = setGraphState graphState skelStore treeViewSkels
     let gs = (readGS,setGS)
 
+    -- Draw state manipulation helper
+    let changeState = changeDrawingState graphState drawState cursors drawWidget
+
     -- Connect signals to callbacks (main window)
     on window objectDestroy mainQuit
     widgetAddEvents drawWidget [PointerMotionMask, ButtonPressMask]
@@ -242,6 +248,7 @@ main = do
     on drawWidget motionNotifyEvent (updateScene drawState gs drawWidget)
     on drawWidget buttonPressEvent (handleClick drawState gs drawWidget)
     on drawWidget buttonReleaseEvent (handleRelease drawState gs drawWidget)
+    -- on drawWidget leaveNotify (\_ -> return ())
     on treeViewSkels cursorChanged (updateTypesAndEditor typeStore skelStore treeViewSkels gs drawWidget)
     on skelStore rowsReordered (\ _ _ _ -> updateSkelIndices typeStore skelStore)
     on skelStore rowInserted (\ _ _ -> updateSkelIndices typeStore skelStore)

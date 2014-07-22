@@ -11,6 +11,7 @@ import TypeHierarchy
 import SemanticScheme
 
 -- GUI / Rendering stuff
+import Graphics.UI.Gtk.Gdk.DrawWindow
 import Graphics.Rendering.Cairo
 import Control.Concurrent.MVar
 import Graphics.UI.Gtk.Gdk.EventM
@@ -417,12 +418,16 @@ handleRelease drawStateM (readGS,setGS) drawWidget = do
       _ -> return ()
     return True
 
-changeDrawingState gsM drawStateM newState = do
-   modifyMVar_ drawStateM (\oldState -> do 
+changeDrawingState gsM drawStateM cursors drawArea newState = do
+   modifyMVar_ drawStateM (\oldState -> do
      case (oldState,newState) of
        (DSelect,DNode) -> resetSelection
        (DSelect,DEdge) -> resetSelection
        _ -> return ()
+     window <- widgetGetParentWindow drawArea
+     case newState of
+       DEdge -> drawWindowSetCursor window (Just $ cursors !! 1)
+       _ -> drawWindowSetCursor window Nothing
      return newState)
    where
      resetSelection = modifyMVar_ gsM (\gs -> return $ gs { selection = NoSelection })
