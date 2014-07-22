@@ -2,6 +2,23 @@
 <!-- Generated with glade 3.18.2 -->
 <interface>
   <requires lib="gtk+" version="3.10"/>
+  <object class="GtkImage" id="image-newedge">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="tooltip_text" translatable="yes">Create a new edge</property>
+    <property name="pixbuf">edge.svg</property>
+  </object>
+  <object class="GtkImage" id="image-newnode">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="tooltip_text" translatable="yes">Create a new node</property>
+    <property name="pixbuf">node.svg</property>
+  </object>
+  <object class="GtkImage" id="image-selection">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="pixbuf">selection.svg</property>
+  </object>
   <object class="GtkListStore" id="liststore1"/>
   <object class="GtkListStore" id="liststore2"/>
   <object class="GtkWindow" id="window1">
@@ -181,6 +198,7 @@
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
+                        <property name="tooltip_text" translatable="yes">Add a new skeleton</property>
                         <property name="use_stock">True</property>
                         <property name="always_show_image">True</property>
                       </object>
@@ -196,6 +214,7 @@
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
+                        <property name="tooltip_text" translatable="yes">Delete the current skeleton</property>
                         <property name="use_stock">True</property>
                         <property name="always_show_image">True</property>
                       </object>
@@ -303,8 +322,10 @@
                           <object class="GtkToolButton" id="selectbutton">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
+                            <property name="tooltip_text" translatable="yes">Select a node, edge or gate</property>
                             <property name="label" translatable="yes">Select</property>
                             <property name="use_underline">True</property>
+                            <property name="icon_widget">image-selection</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -317,6 +338,7 @@
                             <property name="can_focus">False</property>
                             <property name="label" translatable="yes">New node</property>
                             <property name="use_underline">True</property>
+                            <property name="icon_widget">image-newnode</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -329,6 +351,7 @@
                             <property name="can_focus">False</property>
                             <property name="label" translatable="yes">New edge</property>
                             <property name="use_underline">True</property>
+                            <property name="icon_widget">image-newedge</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -339,8 +362,10 @@
                           <object class="GtkToolButton" id="deleteelement">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
+                            <property name="tooltip_text" translatable="yes">Delete an element</property>
                             <property name="label" translatable="yes">Delete</property>
                             <property name="use_underline">True</property>
+                            <property name="stock_id">gtk-delete</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
