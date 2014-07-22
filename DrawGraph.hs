@@ -276,6 +276,7 @@ rebuildGraphState gs =
                     (originalTypeSkeleton gs)
 
 -- Handle a click based on the current state
+--handleClick :: MVar DrawingState -> (IO GraphState,GraphState -> IO ()) -> DrawWindow -> IO ()
 handleClick drawStateM (readGS,setGS) drawWidget = do
     coords <- eventCoordinates
     let (x,y) = coords
@@ -340,6 +341,7 @@ handleClick drawStateM (readGS,setGS) drawWidget = do
           return ()
         else
           tryActions pos others
+
       deleteNearestGate (x,y) = do
         gs <- readGS
         let searchResult = findBoundingBox x y (gateBB gs)
@@ -351,7 +353,43 @@ handleClick drawStateM (readGS,setGS) drawWidget = do
             return True
 
       deleteNearestEdge (x,y) = do
-        return False -- not implemented yet
+        gs <- liftIO readGS
+        deleteEdge gs
+        where
+          deleteEdge gs =
+            case bestCandidate of
+              Nothing -> return False
+              Just (edge,distance) -> do
+                let newEdges = Set.delete (OEdge (fst edge) (snd edge)) (edgesList graph)
+                setGS $ gs { totalGraph = graph { edgesList = newEdges } }
+                return True
+            where
+              graph = totalGraph gs
+              edges = List.map (\ (OEdge a b) -> (a,b)) . elems . edgesList $ graph
+              distances = List.map (getDistance gs) edges
+              zipped = List.zip edges distances
+              bestCandidate = do
+                 best <- findMin zipped
+                 if (snd best) < maxDistEdgeDeletion then
+                   return best
+                 else
+                   Nothing
+        
+          getDistance gs (from,to) =
+             let fromPos = getPos from in
+             let toPos = getPos to in
+             let uv = diff2 toPos fromPos in
+             let n = l2norm uv in
+             if n == 0 then
+                gateBBhalfSize*4.0
+             else
+                let ua = diff2 (x,y) fromPos in
+                cross ua (toUnitary uv)
+             where
+                getPos = getGatePos (totalGraph gs) (presentation gs)
+          findMin :: Ord b => [(a,b)] -> Maybe (a,b)
+          findMin [] = Nothing
+          findMin lst = Just $ List.minimumBy (\(_,a) (_,b) -> compare a b) lst
 
       deleteNearestNode (x,y) = do
         gs <- liftIO readGS
