@@ -9,6 +9,7 @@ import OpenGraph as OG
 import GraphPresentation
 import TypeHierarchy
 import SemanticScheme
+import Utilities
 
 -- GUI / Rendering stuff
 import Graphics.UI.Gtk.Gdk.DrawWindow
@@ -41,11 +42,6 @@ data GraphState = GraphState {
        lastMouse :: Maybe (Double,Double),
        originalTypeSkeleton :: LambekSkel }
 
-seqInt 0 accu = accu
-seqInt n accu = seqInt (n-1) (n:accu)
-
-doList f = List.foldl (\ accu elem -> accu >> (f elem)) (return ())
-doSet f = Set.foldl (\ accu elem -> accu >> (f elem)) (return ())
 
 -- Draw a node onscreen
 drawNode :: Double -> Double -> Int -> Int -> Render ()
