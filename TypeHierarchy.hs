@@ -209,7 +209,7 @@ atomLF atomFun = do
 termLFwhiteSpace = whiteSpaceL >> termLF
 
 tableLF = [ [PE.Infix (whiteSpaceL >> char '/' >> return LFRight) AssocLeft ],
-            [PE.Infix (whiteSpaceL >> char '\\' >> return (\a b -> LFLeft b a)) AssocRight ] ]
+            [PE.Infix (whiteSpaceL >> char '\\' >> return LFLeft) AssocRight ] ]
 
 parserLF = buildExpressionParser tableLF termLFwhiteSpace
 

@@ -326,7 +326,7 @@ handleClick drawStateM (readGS,setGS) drawWidget = do
              gotoState DEdge
         widgetQueueDraw drawWidget
       DDelete -> do
-        tryActions (x,y) [deleteNearestGate, deleteNearestEdge, deleteNearestNode]
+        tryActions (x,y) [deleteNearestGate, deleteNearestNode, deleteNearestEdge]
         updateBoundingBoxes (readGS,setGS)
         widgetQueueDraw drawWidget
       _ -> return ()
@@ -384,7 +384,7 @@ handleClick drawStateM (readGS,setGS) drawWidget = do
                 gateBBhalfSize*4.0
              else
                 let ua = diff2 (x,y) fromPos in
-                cross ua (toUnitary uv)
+                abs . cross ua $ (toUnitary uv)
              where
                 getPos = getGatePos (totalGraph gs) (presentation gs)
           findMin :: Ord b => [(a,b)] -> Maybe (a,b)
