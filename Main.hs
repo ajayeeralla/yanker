@@ -17,6 +17,7 @@ import OpenGraph
 import TypeHierarchy
 import TypeDatabase
 import SemanticScheme
+import Paths_yanker
 import Data.List as List
 
 -- The type of an entry in the type list,
@@ -37,7 +38,8 @@ defaultGraphState =
 
 loadTypeDatabase :: IO [TypeEntry]
 loadTypeDatabase = do
-    typeFile <- readFile "data/short.types.db"
+    typePath <- getDataFileName "data/short.types.db"
+    typeFile <- readFile typePath
     typeLines <- return $ lines typeFile
     let typeDB = sequence . List.map (parse parserWithEof "") $ typeLines
     case typeDB of
@@ -54,7 +56,8 @@ loadTypeDatabase = do
         return $ TypeEntry a b True 0 -- True is the default visibility
 
 createAddDialog builder skelStore typeStore = do -- skelUniqueId = do
-    builderAddFromFile builder "gui/add-skeleton-dialog.glade"
+    dialogPath <- getDataFileName "gui/add-skeleton-dialog.glade"
+    builderAddFromFile builder dialogPath
     addSkeletonDialog <- builderGetObject builder castToDialog "dialog1"
     cancelButton <- builderGetObject builder castToButton "buttoncancel"
     addButton <- builderGetObject builder castToButton "buttonadd"
@@ -125,7 +128,8 @@ trySaveSemScheme mainWindow skelStore fname = do
       
 
 createAboutDialog builder = do
-    builderAddFromFile builder "gui/about-dialog.glade"
+    dialogPath <- getDataFileName "gui/about-dialog.glade"
+    builderAddFromFile builder dialogPath
     aboutDialog <- builderGetObject builder castToDialog "aboutdialog"
     widgetShowAll aboutDialog
 
@@ -208,7 +212,8 @@ main = do
     -- GUI setup
     initGUI
     builder <- builderNew
-    builderAddFromFile builder "gui/interface.glade"
+    interfacePath <- getDataFileName "gui/interface.glade"
+    builderAddFromFile builder interfacePath
 
     -- Cursors for the drawing area
     crossCursor <- cursorNew Crosshair

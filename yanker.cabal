@@ -14,6 +14,16 @@ maintainer:          antonin@delpeuch.eu
 category:            Language
 build-type:          Simple
 cabal-version:       >=1.8
+Data-Files:
+    gui/interface.glade
+    gui/about-dialog.glade
+    gui/add-skeleton-dialog.glade
+    gui/delete.svg
+    gui/edge.svg
+    gui/node.svg
+    gui/selection.svg
+    schemes/demo.scheme
+    data/short.types.db
 
 executable yanker
   main-is:             Main.hs
