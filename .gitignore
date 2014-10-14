@@ -10,3 +10,8 @@ types.tsv
 dist
 .cabal-sandbox
 cabal.sandbox.config
+# Debian build files
+*-ghc-stamp
+Setup.hi
+Setup.o
+dist-ghc
