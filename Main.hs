@@ -66,6 +66,7 @@ createAddDialog builder skelStore typeStore = do -- skelUniqueId = do
     on addSkeletonDialog objectDestroy (widgetHide addSkeletonDialog)
     on cancelButton buttonActivated (widgetHide addSkeletonDialog)
     on addButton buttonActivated (tryAdd addSkeletonDialog lineEntry)
+    on lineEntry entryActivated (tryAdd addSkeletonDialog lineEntry)
     widgetShowAll addSkeletonDialog
     where
       tryAdd dialog lineEntry = do
