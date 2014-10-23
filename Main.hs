@@ -198,6 +198,16 @@ setGraphState gsM skelStore skelView newGs = do
     listStoreSetValue skelStore idx
       (SkelEntry (originalTypeSkeleton newGs) (totalGraph newGs) (presentation newGs))
 
+-- Sets the global state to that of a default semantic scheme.
+resetSemanticScheme gs typeStore skelStore skelView drawWidget = do
+    listStoreClear skelStore
+    Fold.mapM_ (listStoreAppend skelStore) defaultSemanticScheme
+    
+    selection <- treeViewGetSelection skelView
+    treeSelectionSelectPath selection [0]
+    updateTypesAndEditor typeStore skelStore skelView gs drawWidget
+
+
 main :: IO ()
 main = do
     -- State of the interface
@@ -233,10 +243,11 @@ main = do
     addSkelButton <- builderGetObject builder castToButton "buttonaddrule"
     delSkelButton <- builderGetObject builder castToButton "buttondelrule"
     
-    [openButton, saveButton, saveAsButton, quitButton, aboutButton] <-
+    [openButton, saveButton, saveAsButton,
+     quitButton, aboutButton, newSchemeButton] <-
       sequence (List.map
                 (\x -> builderGetObject builder castToImageMenuItem ("imagemenuitem-"++x))
-      ["open","save","save-as","quit","about"])
+      ["open","save","save-as","quit","about", "new"])
 
     -- Graph state manipulation helpers
     let readGS = readMVar graphState
@@ -274,6 +285,8 @@ main = do
       (createFileDialog FileChooserActionSave window (trySaveSemScheme window skelStore))
     on quitButton menuItemActivated (exitApplication window)
     on aboutButton menuItemActivated (createAboutDialog builder)
+    on newSchemeButton menuItemActivated
+      (resetSemanticScheme gs typeStore skelStore treeViewSkels drawWidget)
 
     -- Load type database
     colOccur <- Model.treeViewColumnNew
@@ -308,11 +321,9 @@ main = do
            $ (\tp -> [Model.cellText := renderLS . skeleton $ tp])
     Model.treeViewAppendColumn treeViewSkels colSkel
 
-    -- Update the graph and matching types for the first time
-    selection <- treeViewGetSelection treeViewSkels
-    treeSelectionSelectPath selection [0]
-    updateTypesAndEditor typeStore skelStore treeViewSkels gs drawWidget
-    
+    -- Synchronize UI with the default semantic scheme
+    resetSemanticScheme gs typeStore skelStore treeViewSkels drawWidget
+
     widgetShowAll window
     mainGUI
 
