@@ -75,7 +75,6 @@ createAddDialog builder skelStore typeStore = do -- skelUniqueId = do
           Left error -> print error
           Right lambekSkel -> do
             appendToStore (defaultSkelEntry lambekSkel)
-            putStrLn (show lambekSkel)
             widgetHide dialog
       appendToStore lambekSkel = do
         listStorePrepend skelStore lambekSkel
@@ -201,7 +200,7 @@ setGraphState gsM skelStore skelView newGs = do
 main :: IO ()
 main = do
     -- State of the interface
-    graphState <- newMVar defaultGraphState
+    graphState <- newMVar defaultGraphState -- will be overridden later in updateTypesAndEditor
     drawState <- newMVar DSelect
     
     -- Create stores and lists
@@ -307,6 +306,11 @@ main = do
     Model.cellLayoutSetAttributes colSkel renderer skelStore
            $ (\tp -> [Model.cellText := renderLS . skeleton $ tp])
     Model.treeViewAppendColumn treeViewSkels colSkel
+
+    -- Update the graph and matching types for the first time
+    selection <- treeViewGetSelection treeViewSkels
+    treeSelectionSelectPath selection [0]
+    updateTypesAndEditor typeStore skelStore treeViewSkels gs drawWidget
     
     widgetShowAll window
     mainGUI
