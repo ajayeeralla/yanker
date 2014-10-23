@@ -23,10 +23,11 @@ Data-Files:
     gui/node.svg
     gui/selection.svg
     schemes/demo.scheme
-    data/short.types.db
+    data/types.db
 
 executable yanker
   main-is:             Main.hs
+  hs-source-dirs:      src/
   -- other-modules:       
   extensions:          DoAndIfThenElse
   build-depends:       base ==4.6.*, gtk3 ==0.12.*, transformers ==0.3.*, mtl ==2.1.*, parsec ==3.1.*, containers ==0.5.*, binary ==0.7.*, cereal ==0.4.*, cairo ==0.12.*
