@@ -15,3 +15,4 @@ cabal.sandbox.config
 Setup.hi
 Setup.o
 dist-ghc
+debian/
