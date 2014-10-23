@@ -38,7 +38,7 @@ defaultGraphState =
 
 loadTypeDatabase :: IO [TypeEntry]
 loadTypeDatabase = do
-    typePath <- getDataFileName "data/short.types.db"
+    typePath <- getDataFileName "data/types.db"
     typeFile <- readFile typePath
     typeLines <- return $ lines typeFile
     let typeDB = sequence . List.map (parse parserWithEof "") $ typeLines
