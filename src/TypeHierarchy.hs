@@ -59,6 +59,13 @@ renderLFparen t@(LFRight _ _) _ = addParen $ renderLFparen t NoParen
 
 renderLF x = renderLFparen x NoParen
 
+typeLengthLF :: LambekFun -> Int
+typeLengthLF (LFAtom _) = 1
+typeLengthLF (LFLeft body arg) =
+  typeLengthLF body + (typeLengthLF arg)
+typeLengthLF (LFRight body arg) =
+  typeLengthLF body + (typeLengthLF arg)
+
 -- Lambek skeletons (without products)
 data LambekSkel =
       LSAtom AnnotT
@@ -179,6 +186,11 @@ parserLFeof = do
    whiteSpaceL
    eof
    return x
+
+parseLFFromString :: String -> Either String LambekFun
+parseLFFromString input = case parse parserLFeof "" input of
+  Left error -> Left (show error)
+  Right something -> Right something
 
 ---- Parsing for skeletons ----
 

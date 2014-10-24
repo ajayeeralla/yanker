@@ -8,6 +8,8 @@ import Data.Set as Set
 import Data.Maybe
 import Data.List as List
 
+import TypeHierarchy
+
 data ParseStructure =
   ParseStructure {bindings::[(Int,Int)], root::Int}
 
@@ -24,38 +26,60 @@ qNameCCG = mkName "ccg"
 qNameRule = mkName "rule"
 qNameLF = mkName "lf"
 
-parseXMLderivation :: [Int] -> XmlTree -> Set (Int,Int)
-parseXMLderivation offsets tree =
-  recurse tree
+parseXMLderivation :: XmlTree -> Set (Int,Int)
+parseXMLderivation tree =
+  let (bindings,typ) = recurse 0 tree in
+  bindings
   where
-  recurse (NTree (XTag name attrs) children) =
+  recurse :: Int -> XmlTree -> (Set (Int,Int),LambekFun)
+  recurse offset (NTree (XTag name attrs) children) =
+    let typ = (maybeToEither "Attribute 'cat' not found in XML tag"
+               (getAttr "cat" attrs)) >>= parseLFFromString in
+    let currentType =
+          case typ of
+           Right x -> x
+           Left er -> error er
+    in
+    let length = typeLengthLF currentType in
+    
     if name == qNameLF then
-      Set.empty
+      (Set.empty,currentType)
     else if name == qNameCCG then
-      mapM_ recurse children
+      case children of
+        [child] -> recurse offset child
+        otherwise -> error "Expecting exactly one child for <ccg> tag"
     else if name == qNameRule then
       case children of
-        [unary] -> recurse unary
+        [unary] -> recurse offset unary
         [left,right] ->
+          let (bindL,typeL) = recurse offset left in
+          let leftSize = typeLengthLF typeL in
+          let (bindR,typeR) = recurse offset right in
           case ruleType attrs of
             Just "fa" -> -- forward application
-              Set.empty -- TODO
+              (Set.empty,currentType) -- TODO
             Just "ba" -> -- backward application
-              Set.empty
+              (Set.empty,currentType)
             Just "lp" -> -- left punctuation
-              recurse right
+              recurse offset right
             Just "rp" -> -- right punctuation
-              recurse left
+              recurse offset left
             Just x -> error "Not implemented"
     else
       error "Invalid XML derivation"
   ruleType :: XmlTrees -> Maybe String
-  ruleType = do
-    (NTree _ children) <- List.find $
-             \ (NTree root children) -> root == XTag (mkName "type")
+  ruleType = getAttr "type"
+  getAttr :: String -> XmlTrees -> Maybe String
+  getAttr attrName trees = do
+    (NTree _ children) <- List.find 
+             (\ (NTree root children) -> root == XAttr (mkName attrName)) trees
     (NTree val _) <- listToMaybe children
     case val of
-      XText str -> return str
+      (XText str) -> return str
       otherwise -> Nothing
+  
+  maybeToEither :: a -> Maybe b -> Either a b
+  maybeToEither message (Just x) = Right x
+  maybeToEither message Nothing = Left message
 
 
