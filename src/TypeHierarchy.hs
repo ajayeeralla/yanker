@@ -16,64 +16,26 @@ import Text.ParserCombinators.Parsec.Expr as PE
 import Text.ParserCombinators.Parsec.Language
 
 import qualified Data.Map.Strict as Map
--- import Data.Semigroup
 
--- Simple type in a pregroup: a base type and an exponent. +1 means right, -1 means left
-data PrgSType = PrgS String Int
-        deriving (Show, Eq, GGen.Generic)
-instance Binary PrgSType
+-- Base types with annotations
+data AnnotT = AnnotT { baseType :: String, annotType :: Maybe String }
+              deriving (Eq,Show,Ord,GGen.Generic)
+instance Binary AnnotT
 
--- Left adjoint
-leftAdj (PrgS base exp) = PrgS base (exp-1)
--- Right adjoint 
-rightAdj (PrgS base exp) = PrgS base (exp+1)
--- Pretty printing
-renderST (PrgS base 0) = base
-renderST (PrgS base n) =
-   let exponent = (if n > 0 then replicate n 'r' else replicate (-n) 'l')
-   in
-   base ++ "(" ++ exponent ++ ")"
+renderAnnotT :: AnnotT -> String
+renderAnnotT (AnnotT base Nothing) = base
+renderAnnotT (AnnotT base (Just annot)) = base ++ "[" ++ annot ++ "]"
 
--- (Complex) type in a pregroup: list of simple types
-data PrgType = Prg [PrgSType]
-        deriving (GGen.Generic)
-instance Binary PrgType
-
--- Left adjoint
-leftAdjC (Prg l) = (Prg (reverse (map leftAdj l)))
--- Right adjoint
-rightAdjC (Prg l) = (Prg (reverse (map rightAdj l)))
--- Pretty printing
-renderPrg (Prg t) = foldl (\accu e -> renderST e ++ " " ++ accu) "" t
-
-instance Monoid PrgType where
-  mempty = Prg []
-  mappend = (\ (Prg a) (Prg b) -> Prg (a ++ b))
-
--- Simple type in a group: a base type and its exponent (True for +1, False for -1)
-data GrpSType = GrpS String Bool
-        deriving (GGen.Generic)
-instance Binary GrpSType
-
--- Inverse
-invGrpS (GrpS base exp) = GrpS base (not exp)
--- Pretty printing
-renderGS (GrpS base True) = base
-renderGS (GrpS base False) = base ++ "(-1)"
-
--- (Complex) type in a group: product of simple types
-data GrpType = Grp [GrpSType]
-   deriving (GGen.Generic)
-instance Binary GrpType
-
--- Inverse
-invGrp = reverse . (map invGrpS)
--- Pretty printing
-renderGrp = foldl (\ accu elem -> accu ++ " " ++ (renderGS elem)) ""
-
--- Lambek types, without products
+--moreGeneralThan :: AnnotT -> AnnotT -> Bool
+--moreGeneralThan (AnnotT baseA Nothing) (AnnotT baseB t) =
+--  baseA == baseB
+--moreGeneralThan x y =
+--  x == y
+------------------------------------
+-- Lambek types, without products --
+------------------------------------
 data LambekFun =
-       LFAtom { baseLF :: String, annotLF :: Maybe String }
+       LFAtom AnnotT
      | LFLeft LambekFun LambekFun
      | LFRight LambekFun LambekFun
    deriving (Eq,Show,Ord,GGen.Generic)
@@ -83,8 +45,7 @@ instance Binary LambekFun
 data ParenthesisNeeded = NoParen | AlwaysParen | ParenLeft | ParenRight
 addParen str = "("++str++")"
 
-renderLFparen (LFAtom s Nothing) _ = s
-renderLFparen (LFAtom s (Just annot)) _ = s ++ "[" ++ annot ++ "]"
+renderLFparen (LFAtom base) _ = renderAnnotT base
 
 renderLFparen (LFLeft b a) NoParen =
   (renderLFparen a AlwaysParen) ++ "\\" ++ (renderLFparen b ParenRight)
@@ -100,7 +61,7 @@ renderLF x = renderLFparen x NoParen
 
 -- Lambek skeletons (without products)
 data LambekSkel =
-      LSAtom { baseLS :: String, annotLS :: Maybe String }
+      LSAtom AnnotT
     | LSVar Int
     | LSLeft LambekSkel LambekSkel
     | LSRight LambekSkel LambekSkel
@@ -109,8 +70,7 @@ instance Binary LambekSkel
 
 -- Pretty printing
 
-renderLSparen (LSAtom s Nothing) _ = s
-renderLSparen (LSAtom s (Just annot)) _ = s ++ "[" ++ annot ++ "]"
+renderLSparen (LSAtom base) _ = renderAnnotT base
 
 renderLSparen (LSVar n) _ = show n
 
@@ -137,11 +97,11 @@ unionMap m1 m2 =
           else Nothing))
      (Just m2)
      m1
-
+     
 -- Does this lambek type matches this Lambek skeleton ? If no, Nothing. Else, Just the corresponding type assignment
 matchSkeleton :: LambekSkel -> LambekFun -> Maybe (Map.Map Int LambekFun)
-matchSkeleton x@(LSAtom a annotA) y@(LFAtom b annotB) =
-   if a == b && annotA == annotB then Just Map.empty else Nothing
+matchSkeleton x@(LSAtom a) y@(LFAtom b) =
+   if a == b then Just Map.empty else Nothing
 matchSkeleton (LSVar x) t = Just $ Map.insert x t Map.empty
 matchSkeleton (LSLeft a1 b1) (LFLeft a2 b2) = do
    s1 <- matchSkeleton a1 a2
@@ -198,13 +158,13 @@ termLF = (atomLF LFAtom) <|> (P.parens lexerL parserLF)
 
 atomLF atomFun = do
   id <- (P.identifier lexerL)
-  bracketParser id <|> (return $ atomFun id Nothing)
+  bracketParser id <|> (return $ atomFun (AnnotT id Nothing))
   where
     bracketParser baseId = do
       char '['
       annot <- myIdentifier
       char ']'
-      return $ atomFun baseId . Just $ annot
+      return $ atomFun (AnnotT baseId (Just annot))
 
 termLFwhiteSpace = whiteSpaceL >> termLF
 
@@ -242,3 +202,77 @@ parserLSeof = do
   whiteSpaceL
   eof
   return x
+  
+--------------------
+-- Pregroup types --
+--------------------
+
+-- Simple type in a pregroup: a base type and an exponent. +1 means right, -1 means left
+data PrgSType = PrgS AnnotT Int
+        deriving (Show, Eq, GGen.Generic)
+instance Binary PrgSType
+
+-- Simple left adjoint
+leftAdjS (PrgS base exp) = PrgS base (exp-1)
+-- Simple right adjoint 
+rightAdjS (PrgS base exp) = PrgS base (exp+1)
+-- Pretty printing
+renderST (PrgS base 0) = renderAnnotT base
+renderST (PrgS base n) =
+   let exponent = (if n > 0 then replicate n 'r' else replicate (-n) 'l')
+   in
+   (renderAnnotT base) ++ "(" ++ exponent ++ ")"
+
+-- (Complex) type in a pregroup: list of simple types
+type PrgType = [PrgSType]
+
+-- Left adjoint
+leftAdj :: PrgType -> PrgType
+leftAdj = reverse . map leftAdjS
+-- Right adjoint
+rightAdj :: PrgType -> PrgType
+rightAdj = reverse . map rightAdjS
+-- Pretty printing
+renderPrg :: PrgType -> String
+renderPrg = foldl (\accu e -> renderST e ++ " " ++ accu) ""
+
+-- Canonical morphism from Lambek to pregroup
+lambekToPregroup :: LambekFun -> PrgType
+lambekToPregroup (LFAtom typ) = [PrgS typ 0]
+lambekToPregroup (LFLeft body arg) =
+  (lambekToPregroup body) ++ (leftAdj . lambekToPregroup $ arg)
+lambekToPregroup (LFRight body arg) =
+  (rightAdj . lambekToPregroup $ arg) ++ (lambekToPregroup body)
+       
+-----------------
+-- Group types --
+-----------------
+
+-- Simple type in a group: a base type and its exponent (True for +1, False for -1)
+data GrpSType = GrpS AnnotT Bool
+        deriving (GGen.Generic)
+instance Binary GrpSType
+
+-- Inverse
+invGrpS (GrpS base exp) = GrpS base (not exp)
+-- Pretty printing
+renderGS (GrpS base True) = renderAnnotT base
+renderGS (GrpS base False) = (renderAnnotT base) ++ "(-1)"
+
+-- (Complex) type in a group: product of simple types
+type GrpType = [GrpSType]
+
+-- Inverse
+invGrp = reverse . (map invGrpS)
+-- Pretty printing
+renderGrp = foldl (\ accu elem -> accu ++ " " ++ (renderGS elem)) ""
+
+-- Canonical morphism from pregroup to group
+-- Simple version
+pregroupToGroupS :: PrgSType -> GrpSType
+pregroupToGroupS (PrgS base exp) = GrpS base (exp `rem` 2 == 0)
+
+-- Complex version
+pregroupToGroup :: PrgType -> GrpType
+pregroupToGroup =
+  map pregroupToGroupS
