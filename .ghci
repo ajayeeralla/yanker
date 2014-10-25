@@ -1,2 +1,1 @@
-:set -i.ghci-only/
-
+:set -i.ghci-only/ -isrc/
