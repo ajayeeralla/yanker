@@ -295,6 +295,7 @@ handleClick drawStateM (readGS,setGS) drawWidget = do
         setGS (gs { totalGraph = newGraph,
                     presentation = newPres,
                     nodeBB = newNodeBB })
+        gotoState DSelect
         widgetQueueDraw drawWidget
       DSelect -> do
         putStrLn ("Click handled at position " ++ (show coords))
@@ -495,7 +496,7 @@ drawTypeSkeleton skel = do
       drawHorizontallyCenteredText x typeSkeletonPosition text l r
       
     drawSubSkeleton :: Double -> ParenthesisNeeded -> String -> String -> LambekSkel -> Render Double
-    drawSubSkeleton offset _ l r t@(LSAtom s _) = do
+    drawSubSkeleton offset _ l r t@(LSAtom s) = do
       drawHorizText (offset*outerGateSpacing) (renderLS t) l r
       return (offset + 1)
     drawSubSkeleton offset _ l r t@(LSVar n) = do

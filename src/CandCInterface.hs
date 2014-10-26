@@ -7,6 +7,7 @@ import Data.Tree.NTree.TypeDefs
 import Data.Set as Set
 import Data.Maybe
 import Data.List as List
+import Data.Bimap
 
 import TypeHierarchy
 
@@ -22,16 +23,18 @@ data CACTree =
   | CACTraise CACTree
     deriving (Eq,Show,Ord)
 
+type Bindings = Bimap Int Int
+
 qNameCCG = mkName "ccg"
 qNameRule = mkName "rule"
 qNameLF = mkName "lf"
 
-parseXMLderivation :: XmlTree -> Set (Int,Int)
+parseXMLderivation :: XmlTree -> Bindings
 parseXMLderivation tree =
   let (bindings,typ) = recurse 0 tree in
   bindings
   where
-  recurse :: Int -> XmlTree -> (Set (Int,Int),LambekFun)
+  recurse :: Int -> XmlTree -> (Bindings,LambekFun)
   recurse offset (NTree (XTag name attrs) children) =
     let typ = (maybeToEither "Attribute 'cat' not found in XML tag"
                (getAttr "cat" attrs)) >>= parseLFFromString in
@@ -54,19 +57,22 @@ parseXMLderivation tree =
         [left,right] ->
           let (bindL,typeL) = recurse offset left in
           let leftSize = typeLengthLF typeL in
-          let (bindR,typeR) = recurse offset right in
+          let (bindR,typeR) = recurse (offset+leftSize) right in
           case ruleType attrs of
             Just "fa" -> -- forward application
-              (Set.empty,currentType) -- TODO
+              let cancel = cancellationGraph True (offset+leftSize) typeR in
+              (Set.union cancel bindL,currentType) -- TODO
             Just "ba" -> -- backward application
               (Set.empty,currentType)
             Just "lp" -> -- left punctuation
-              recurse offset right
+              (bindR,typeR)
             Just "rp" -> -- right punctuation
-              recurse offset left
+              (bindL,typeL)
             Just x -> error "Not implemented"
     else
       error "Invalid XML derivation"
+  asGroup :: LambekFun -> GrpType
+  asGroup = pregroupToGroup . lambekToPregroup
   ruleType :: XmlTrees -> Maybe String
   ruleType = getAttr "type"
   getAttr :: String -> XmlTrees -> Maybe String

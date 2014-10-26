@@ -54,8 +54,8 @@ emptyGraphFromSkel sk =
   where
     (gates,_) = dfs [] 1 False sk
     dfs :: [OGate] -> Int -> Bool -> LambekSkel -> ([OGate],Int)
-    dfs accu count productive (LSAtom base _) =
-      ((OGate (base ++ (show count)) productive):accu, count+1)
+    dfs accu count productive (LSAtom base) =
+      ((OGate ((renderAnnotT base) ++ (show count)) productive):accu, count+1)
     dfs accu count productive (LSVar name) =
       ((OGate ((show name) ++ "-" ++ (show count)) productive):accu, count+1)
     dfs accu count productive (LSLeft body argument) =
