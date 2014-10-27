@@ -7,7 +7,7 @@ import Data.Tree.NTree.TypeDefs
 import Data.Set as Set
 import Data.Maybe
 import Data.List as List
-import Data.Bimap
+import Data.Map as Map
 
 import TypeHierarchy
 
@@ -23,7 +23,35 @@ data CACTree =
   | CACTraise CACTree
     deriving (Eq,Show,Ord)
 
-type Bindings = Bimap Int Int
+type Bindings = [(Int,Int)]
+
+-- Computes the cancellation graph for a given type
+-- left: indicates if we cancel using the left adjoint (otherwise, right adjoint)
+-- right case: suppose the type is translated to a_1^{b_1} … a_n^{b_n) in a group
+--  a_1^{b_1} … a_n^{b_n} a_n^{-b_n} … a_1^{-b_1}
+--       \            \  |  /           /
+--        \            --|--           /
+--         \             |            /
+--          -------------|------------
+--                     offset
+-- 
+cancellationGraph :: Bool -> Int -> LambekFun -> Bindings
+cancellationGraph left offset lambekType =
+  let groupType = lambekToGroup lambekType in
+  let inversed =
+        if left then
+          invGrp groupType
+        else
+          groupType
+  in
+  List.map (\(u,v) -> (u+offset,v+offset)) . computeGraph 1 inversed $ []
+  where
+    computeGraph :: Int -> GrpType -> Bindings -> Bindings
+    computeGraph index [] bindings = bindings
+    computeGraph index ((GrpS base exp):t) accu =
+      computeGraph (index+1) t (newElem:accu)
+      where
+        newElem = if exp then (index,-index) else (-index,index)
 
 qNameCCG = mkName "ccg"
 qNameRule = mkName "rule"
@@ -46,7 +74,7 @@ parseXMLderivation tree =
     let length = typeLengthLF currentType in
     
     if name == qNameLF then
-      (Set.empty,currentType)
+      ([],currentType)
     else if name == qNameCCG then
       case children of
         [child] -> recurse offset child
@@ -61,9 +89,9 @@ parseXMLderivation tree =
           case ruleType attrs of
             Just "fa" -> -- forward application
               let cancel = cancellationGraph True (offset+leftSize) typeR in
-              (Set.union cancel bindL,currentType) -- TODO
+              (cancel ++ bindL,currentType) -- TODO
             Just "ba" -> -- backward application
-              (Set.empty,currentType)
+              ([],currentType)
             Just "lp" -> -- left punctuation
               (bindR,typeR)
             Just "rp" -> -- right punctuation

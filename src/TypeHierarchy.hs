@@ -288,3 +288,8 @@ pregroupToGroupS (PrgS base exp) = GrpS base (exp `rem` 2 == 0)
 pregroupToGroup :: PrgType -> GrpType
 pregroupToGroup =
   map pregroupToGroupS
+
+-- Helper
+lambekToGroup :: LambekFun -> GrpType
+lambekToGroup =
+  pregroupToGroup . lambekToPregroup
