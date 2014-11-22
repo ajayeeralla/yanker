@@ -9,6 +9,7 @@ import Control.Exception
 import qualified Data.Set as Set
 import GHC.Generics as GGen
 import Data.Serialize
+import Utilities
 
 -- Internal identifiers (pointers) for nodes
 type OId = Int
@@ -20,9 +21,12 @@ data OGate = OGate String Bool
 instance Binary OGate
 
 -- Negates a gate
+neg :: OGate -> OGate
 neg (OGate s b) = OGate s (not b)
 -- Selects only producer (resp. consumer) gates in a list
+producers :: [OGate] -> [OGate]
 producers = filter (\ (OGate _ b) -> b)
+consumers :: [OGate] -> [OGate]
 consumers = filter (\ (OGate _ b) -> not b)
 
 -- Node in a graph: a name (not used internally) and a bunch of gates
@@ -31,6 +35,7 @@ data ONode = ONode String [OGate]
 instance Binary ONode
 
 -- Turns a node upside down: negates its gates
+flip :: ONode -> ONode
 flip (ONode name gates) = ONode name (map neg gates)
 
 -- Path in a graph: the identifier of a node plus the name of the corresponding gate
@@ -51,23 +56,17 @@ data OGraph = OGraph {
    deriving (Eq,Show,GGen.Generic)
 instance Binary OGraph
 -- All the nodes, including a fake node for the boundary
+nodesAndBoundary :: OGraph -> [(OId,ONode)]
 nodesAndBoundary (OGraph boundary nodes _) =
    (boundaryId,(ONode "" boundary)):nodes
 
 -- Get the polarity of a gate (if it exists)
+getGate :: OPath -> OGraph -> Maybe Bool
 getGate (OPath nodeId gateName) (OGraph boundaryGates nodes _) =
    find (\ (id,_) -> id == nodeId) ((boundaryId,(ONode "" boundaryGates)):nodes)
    >>= (\ (_,(ONode _ gates)) -> find (\ (OGate s b) -> s == gateName) gates)
    >>= (\ (OGate _ b) -> Just b)
 
-allSet pred = Set.foldl' (\ found elem -> found && pred elem) True
-concatSet = Set.unions . Set.elems
-countSet f = Set.size . Set.filter f
--- Find an element in a set satisfying a predicate
-findSet predicate = Set.foldl (\ accu elem -> if (predicate elem) then Just elem else accu) Nothing
-
-maybeRead :: Read a => String -> Maybe a
-maybeRead = fmap fst . listToMaybe . reads
 
 hasEdge edges path productive =
    if productive then
