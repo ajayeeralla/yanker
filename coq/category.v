@@ -9,8 +9,8 @@ Check Concat.
 Section Category_theory.
 
 Structure Category : Type := mkCategory
-{ Ob :> Type;
-Hom : Ob -> Ob -> Type;
+{ Ob :> Set;
+Hom : Ob -> Ob -> Set;
 comp : forall {a b c}, Hom b c -> Hom a b -> Hom a c;
 one : forall x:Ob, Hom x x;
 Assoc : forall a b c d (f : Hom c d) (g : Hom b c) (h : Hom a b), comp f (comp g h) = comp (comp f g) h;
@@ -106,6 +106,50 @@ reflexivity.
 symmetry; apply exch_law_2.
 symmetry; apply exch_law_1.
 Qed.
+
+Inductive ilist (A : Set) : nat -> Set :=
+  | Nil : ilist A O
+  | Cons : forall n, A -> ilist A n -> ilist A (S n).
+
+SearchAbout plus.
+
+Fixpoint irev_append {A n m} (l : ilist A n) (r : ilist A m) : (ilist A (n+m)) :=
+ match l in ilist _ n return ilist _ (n+m) with
+ | Nil => r
+ | Cons n h t =>
+   (match eq_sym (plus_n_Sm n m) in (_ = l) return ilist _ l with
+     | eq_refl => irev_append t (Cons A m h r)
+    end)
+ end.
+
+Definition eq_n_O (n:nat): (n + 0 = n) := eq_sym (plus_n_O n).
+Lemma eq_n_O_O : forall (n:nat), (n + 0 + 0 = n).
+Proof.
+intros.
+replace (n + 0) with n.
+apply eq_n_O.
+apply plus_n_O.
+Qed.
+
+Lemma irev_append_involutive : forall {A n} (l : ilist A n),
+      l = (match eq_n_O_O n in (_ = n) return ilist _ n with
+           | eq_refl => (irev_append (irev_append l (Nil A)) (Nil A))
+          end).
+Proof.
+
+
+Definition iapp {A n m} (a: ilist A n) (b: ilist A m) : (ilist A (n+m)) :=
+   let c : ilist A n :=
+      match eq_sym (plus_n_O n) in (_ = n) return ilist _ n with
+       | eq_refl => irev_append a (Nil A)
+      end in
+   irev_append c b.
+
+Lemma iapp_l_nil : forall {A n} (l : ilist A n),
+           (match (eq_sym (plus_n_O n)) in (_ = n) return ilist _ n with 
+            | eq_refl => iapp l (Nil A)
+           end) = l.
+
 
 Definition fObj := list (Ob C).
 Definition fOt : fObj -> fObj -> fObj := Concat.
