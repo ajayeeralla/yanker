@@ -1,11 +1,6 @@
 Section Lists.
 Require Import List.
 
-Definition Concat : forall {A}, (list A) -> (list A) -> (list A) :=
-     fun A => fun a => fun b => rev_append (rev a) b.
-End Lists.
-Check Concat.
-
 Section Category_theory.
 
 Structure Category : Type := mkCategory
@@ -107,58 +102,67 @@ symmetry; apply exch_law_2.
 symmetry; apply exch_law_1.
 Qed.
 
-Inductive ilist (A : Set) : nat -> Set :=
-  | Nil : ilist A O
-  | Cons : forall n, A -> ilist A n -> ilist A (S n).
+Definition fObj := list (Ob C).
+Definition fOt (a:fObj) (b:fObj) : fObj := app a b.
 
-SearchAbout plus.
-
-Fixpoint irev_append {A n m} (l : ilist A n) (r : ilist A m) : (ilist A (n+m)) :=
- match l in ilist _ n return ilist _ (n+m) with
- | Nil => r
- | Cons n h t =>
-   (match eq_sym (plus_n_Sm n m) in (_ = l) return ilist _ l with
-     | eq_refl => irev_append t (Cons A m h r)
-    end)
- end.
-
-Definition eq_n_O (n:nat): (n + 0 = n) := eq_sym (plus_n_O n).
-Lemma eq_n_O_O : forall (n:nat), (n + 0 + 0 = n).
+Lemma fOt_assoc : forall {a b c}, (fOt a (fOt b c)) = fOt (fOt a b) c.
 Proof.
 intros.
-replace (n + 0) with n.
-apply eq_n_O.
-apply plus_n_O.
+apply app_assoc.
 Qed.
 
-Lemma irev_append_involutive : forall {A n} (l : ilist A n),
-      l = (match eq_n_O_O n in (_ = n) return ilist _ n with
-           | eq_refl => (irev_append (irev_append l (Nil A)) (Nil A))
-          end).
+Inductive MNil : Set := Mnil.
+Inductive MCons (dom:Ob C) (cod:Ob C) (T:Set) : Set :=
+  Mcons (f:Hom C dom cod) (t:T).
+
+Import ListNotations.
+
+Fixpoint fHom (dom:fObj) (cod:fObj) : Set :=
+ match (dom,cod) with
+ | ([],[]) => MNil
+ | ((h1::t1),(h2::t2)) => MCons h1 h2 (fHom t1 t2)
+ | ((h1::t1),[]) => False
+ | ([],(h1::t1)) => False
+ end.
+
+Fixpoint fOne (a:fObj) : fHom a a :=
+ match a with
+ | [] => Mnil : MNil
+ | h::t => (Mcons h h (fHom t t) (one C h) (fOne t)) : MCons h h (fHom t t)
+ end.
+
+Lemma nil_cons_bottom : forall {a b}, fHom [] (a::b) = False.
 Proof.
+intros.
+compute.
+reflexivity.
+Qed.
 
+Lemma cons_nil_bottom : forall {a b}, fHom (a::b) [] = False.
+Proof.
+intros; compute; reflexivity.
+Qed.
 
-Definition iapp {A n m} (a: ilist A n) (b: ilist A m) : (ilist A (n+m)) :=
-   let c : ilist A n :=
-      match eq_sym (plus_n_O n) in (_ = n) return ilist _ n with
-       | eq_refl => irev_append a (Nil A)
-      end in
-   irev_append c b.
+Lemma dom_cod_length : forall {a b} (f: fHom a b), length a = length b.
+Proof.
+intros.
+induction a.
+induction b.
+compute; reflexivity.
+rewrite nil_cons_bottom in f.
+exfalso; assumption.
+induction b.
+rewrite cons_nil_bottom in f.
+exfalso; assumption.
+induction b.
+apply f.
+apply nil_cons_bottom.
+rewrite_all.
 
-Lemma iapp_l_nil : forall {A n} (l : ilist A n),
-           (match (eq_sym (plus_n_O n)) in (_ = n) return ilist _ n with 
-            | eq_refl => iapp l (Nil A)
-           end) = l.
-
-
-Definition fObj := list (Ob C).
-Definition fOt : fObj -> fObj -> fObj := Concat.
-
-Definition fHom (dom:fObj) (cod:fObj) : Type :=
-  
+Fixpoint fComp {a b c} (f:fHom b c) (g:fHom a b) : (h:fHom a c) :=
+ match (
 
 Definition freeMon := mkStrictMonoidalCategory C
-
 
 
 Structure MonoidalFunctor : Type := {
