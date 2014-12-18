@@ -143,24 +143,6 @@ Proof.
 intros; compute; reflexivity.
 Qed.
 
-Lemma dom_cod_length : forall {a b} (f: fHom a b), length a = length b.
-Proof.
-intros.
-induction a.
-induction b.
-compute; reflexivity.
-rewrite nil_cons_bottom in f.
-exfalso; assumption.
-induction b.
-rewrite cons_nil_bottom in f.
-exfalso; assumption.
-induction b.
-apply f.
-apply nil_cons_bottom.
-rewrite_all.
-
-Fixpoint fComp {a b c} (f:fHom b c) (g:fHom a b) : (h:fHom a c) :=
- match (
 
 Definition freeMon := mkStrictMonoidalCategory C
 
