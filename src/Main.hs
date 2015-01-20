@@ -5,6 +5,7 @@ import Graphics.UI.Gtk.Gdk.EventM
 import Graphics.UI.Gtk.ModelView as Model
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.State
+import System.Glib (glibTypeInit)
 import Text.ParserCombinators.Parsec
 import Data.Set as Set
 import Data.Map as Map
@@ -210,6 +211,7 @@ resetSemanticScheme gs typeStore skelStore skelView drawWidget = do
 
 main :: IO ()
 main = do
+    glibTypeInit
     -- State of the interface
     graphState <- newMVar defaultGraphState -- will be overridden later in updateTypesAndEditor
     drawState <- newMVar DSelect
