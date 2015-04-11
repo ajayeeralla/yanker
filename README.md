@@ -20,3 +20,6 @@ Then, assuming that the place where `cabal` stores its binaries in in your path,
 If you use Ubuntu or Debian, you can also use one of the following packages:
  * http://antonin.delpeuch.eu/yanker/haskell-yanker_0.1.0.1_amd64.deb
  * http://antonin.delpeuch.eu/yanker/haskell-yanker_0.1.0.1_i386.deb
+
+![Screenshot of yanker](doc/screenshot.png)
+
